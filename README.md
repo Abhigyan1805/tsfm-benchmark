@@ -58,9 +58,9 @@ evaluation slices build against:
   optionally carries engine/backend details; `zero_shot` marks forecasters with no
   learned parameters (reference floors and untuned TSFMs)
 - `RESULT_COLUMNS` — every result row carries those columns in that exact order.
-  `train_seconds` sits immediately after `peak_mem_mb`; it is populated for trained
-  families and left empty for zero-shot and statistical models
-  (`zero_shot: true` and the classical/ML families).
+  `train_seconds` sits immediately after `peak_mem_mb`; it is the measured fit/train
+  wall-clock for families that train or fit (classical, ML, deep) and is left empty
+  only for the `baseline` and zero-shot `tsfm` families.
 
 The experiment runner is resolved from `tsbench.evaluation.runner.run_experiment`
 and called with the experiment config path. The registry is
