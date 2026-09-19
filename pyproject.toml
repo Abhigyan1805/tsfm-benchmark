@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tsfm-benchmark"
+version = "0.1.0"
+description = "Reproducible, cost-aware benchmarking of time-series foundation models against conventional forecasters"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6,<1",
+]
+
+[project.scripts]
+tsbench = "tsbench.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Abhigyan1805/tsfm-benchmark"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tsbench"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]

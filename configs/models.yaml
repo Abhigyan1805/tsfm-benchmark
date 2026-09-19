@@ -1,0 +1,75 @@
+models:
+  naive:
+    entrypoint: tsbench.models.naive:Naive
+    family: baseline
+    zero_shot: true
+    params: 0
+    license: Apache-2.0
+    revision: repo-local:0.0.1
+    notes: Last-value carry-forward reference floor.
+  seasonal_naive:
+    entrypoint: tsbench.models.naive:SeasonalNaive
+    family: baseline
+    zero_shot: true
+    params: 0
+    license: Apache-2.0
+    revision: repo-local:0.0.1
+    notes: Seasonal last-value carry-forward; season length comes from the experiment config.
+  auto_ets:
+    entrypoint: tsbench.models.stats:AutoETS
+    family: classical
+    zero_shot: false
+    params: null
+    license: Apache-2.0
+    revision: TBD-at-download
+    notes: statsforecast AutoETS; parameter count is selected per series.
+  auto_arima:
+    entrypoint: tsbench.models.stats:AutoARIMA
+    family: classical
+    zero_shot: false
+    params: null
+    license: Apache-2.0
+    revision: TBD-at-download
+    notes: statsforecast AutoARIMA; parameter count is selected per series.
+  xgboost_lags:
+    entrypoint: tsbench.models.gbdt:XGBoostLags
+    family: ml
+    zero_shot: false
+    params: null
+    license: Apache-2.0
+    revision: TBD-at-download
+    notes: Lag and calendar features built only from data before the forecast origin.
+  lstm:
+    entrypoint: tsbench.models.deep.lstm:LSTMForecaster
+    family: deep
+    zero_shot: false
+    params: null
+    license: Apache-2.0
+    revision: repo-local:0.0.1
+    notes: Small seeded LSTM; size and training budget come from the experiment config.
+  transformer:
+    entrypoint: tsbench.models.deep.transformer:TransformerForecaster
+    family: deep
+    zero_shot: false
+    params: null
+    license: Apache-2.0
+    revision: repo-local:0.0.1
+    notes: Small seeded transformer; size and training budget come from the experiment config.
+  timesfm25:
+    entrypoint: tsbench.models.tsfm.timesfm:TimesFM25
+    family: tsfm
+    zero_shot: true
+    params: 200000000
+    license: Apache-2.0
+    revision: TBD-at-download
+    weights: google/timesfm-2.5-200m-pytorch
+    notes: TimesFM 2.5 200M only; TimesFM 3.0 weights are non-commercial and out of scope.
+  chronos_bolt:
+    entrypoint: tsbench.models.tsfm.chronos:ChronosBolt
+    family: tsfm
+    zero_shot: true
+    params: 205000000
+    license: Apache-2.0
+    revision: TBD-at-download
+    weights: amazon/chronos-bolt-base
+    notes: Chronos-Bolt base checkpoint (205M).

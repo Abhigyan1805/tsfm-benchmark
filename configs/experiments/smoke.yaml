@@ -1,0 +1,15 @@
+name: smoke
+stage: smoke
+description: End-to-end smoke run on a tiny committed fixture; no downloads and no GPU.
+dataset:
+  loader: local_csv
+  path: tests/fixtures/smoke_series.csv
+  series_id: smoke_series
+  timestamp_column: timestamp
+  value_column: value
+models:
+  - naive
+context_length: 48
+horizon: 12
+stride: 12
+output_dir: results
