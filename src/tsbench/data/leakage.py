@@ -302,8 +302,9 @@ def audit_context_boundary(
         "context slice is exactly the prefix ending at the origin",
     )
     try:
-        assert_context_only_scaling(context, target, origin=origin)
-        report.add("scaling", True, "context-only scaling confirmed")
+        scaling = assert_context_only_scaling(context, target, origin=origin)
     except LeakageError as exc:
         report.add("scaling", False, str(exc))
+    else:
+        report.add("scaling", scaling.passed, scaling.detail)
     return report

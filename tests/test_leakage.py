@@ -92,17 +92,11 @@ def test_scaler_that_fits_on_context_plus_target_is_rejected():
             self.scale = 1.0
             return self
 
-    scaler = LeakyScaler()
-    scaler.fit(context, origin=origin)
-    report = assert_context_only_scaling(context, target, origin=origin)
-    # The audit's job is to confirm context-only statistics are what a correct
-    # scaler uses; a scaler whose center differs has demonstrably used the target.
-    if scaler.center != pytest.approx(float(np.mean(context))):
-        with pytest.raises(LeakageError):
-            raise LeakageError(
-                f"scaler center {scaler.center} came from context+target, not context"
-            )
-    assert report.passed
+    audit = assert_context_only_scaling(
+        context, target, scaler_factory=LeakyScaler, origin=origin
+    )
+    assert audit.passed is False
+    assert "center" in audit.detail
 
 
 def test_scaler_refuses_to_re_derive_at_future_indices():
