@@ -41,12 +41,23 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = REPO_ROOT / "src"
 DOWNLOAD_ENV = "TSBENCH_ALLOW_MODEL_DOWNLOAD"
 
-DEFAULT_ENTRIES = {
-    "lstm": "tsbench.models.deep.lstm:LSTMForecaster",
-    "transformer": "tsbench.models.deep.transformer:TransformerForecaster",
-    "timesfm25": "tsbench.models.tsfm.timesfm:TimesFM25",
-    "chronos_bolt": "tsbench.models.tsfm.chronos:ChronosBolt",
-}
+_MODEL_ENTRIES: dict[str, str] | None = None
+
+
+def model_entries() -> dict[str, str]:
+    """Resolve registry key -> entrypoint from ``configs/models.yaml``.
+
+    The manifest is the single source of truth for entrypoints; the runner
+    derives its defaults from it instead of keeping a second copy in sync.
+    """
+    global _MODEL_ENTRIES
+    if _MODEL_ENTRIES is None:
+        _add_src_to_path()
+        from tsbench.registry import load_registry
+
+        registry = load_registry(REPO_ROOT / "configs" / "models.yaml")
+        _MODEL_ENTRIES = {spec.key: spec.entrypoint for spec in registry}
+    return _MODEL_ENTRIES
 
 
 def _utc_now() -> str:
@@ -168,14 +179,15 @@ def execute_job(job: dict[str, Any], series: list[float], key: str) -> dict[str,
     if len(series) < horizon + 2:
         raise ValueError(f"need at least horizon + 2 points, got {len(series)}")
     model_key = job.get("model")
-    entry = job.get("entry") or (
-        DEFAULT_ENTRIES.get(str(model_key)) if model_key is not None else None
-    )
+    entry = job.get("entry")
     if not entry:
-        raise ValueError(
-            f"unknown model {model_key!r}; known: {sorted(DEFAULT_ENTRIES)} "
-            "or pass an explicit 'entry'"
-        )
+        entries = model_entries()
+        entry = entries.get(str(model_key)) if model_key is not None else None
+        if not entry:
+            raise ValueError(
+                f"unknown model {model_key!r}; known: {sorted(entries)} "
+                "or pass an explicit 'entry'"
+            )
     model_class = load_entry(str(entry))
     model = model_class(**dict(job.get("params") or {}))
     train, holdout = series[:-horizon], series[-horizon:]

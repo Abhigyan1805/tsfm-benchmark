@@ -8,11 +8,14 @@ assert the lazy-dependency error instead of skipping silently.
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import math
 import os
 import random
+import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -308,18 +311,59 @@ class KaggleRunnerTests(unittest.TestCase):
         self.assertNotEqual(first, self.kaggle.kernel_slug(self.jobs, "def"))
         self.assertRegex(first, r"^tsbench-gpu-[0-9a-f]{12}$")
 
-    def test_kernel_source_embeds_jobs_and_gate(self) -> None:
+    def test_kernel_source_executes_the_generated_batch(self) -> None:
+        repo = "https://example.invalid/repo.git"
+        ref = "deadbeef"
+        run_name = "run-1"
+        packages = ["timesfm[torch]"]
         source = self.kaggle.kernel_source(
             self.jobs,
-            repo="https://example.invalid/repo.git",
-            ref="deadbeef",
-            run_name="run-1",
-            pip_packages=["timesfm[torch]"],
+            repo=repo,
+            ref=ref,
+            run_name=run_name,
+            pip_packages=packages,
         )
-        self.assertIn("TSBENCH_ALLOW_MODEL_DOWNLOAD", source)
-        self.assertIn("timesfm[torch]", source)
-        self.assertIn("/kaggle/working", source)
-        self.assertIn("git\", \"clone", source)
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append([str(part) for part in cmd])
+            return subprocess.CompletedProcess(cmd, 0)
+
+        namespace: dict = {}
+        with (
+            mock.patch.dict(os.environ),
+            mock.patch.object(subprocess, "run", side_effect=fake_run),
+        ):
+            exec(compile(source, "kernel.py", "exec"), namespace)
+            gate = os.environ.get("TSBENCH_ALLOW_MODEL_DOWNLOAD")
+
+        self.assertEqual(gate, "1")
+
+        self.assertEqual(namespace["JOBS"], self.jobs)
+        self.assertEqual(namespace["REPO"], repo)
+        self.assertEqual(namespace["REF"], ref)
+        self.assertEqual(namespace["PIP_PACKAGES"], packages)
+        self.assertEqual(namespace["RUN_DIR"], Path("/kaggle/working") / run_name)
+
+        repo_dir = str(namespace["REPO_DIR"])
+        run_dir = str(namespace["RUN_DIR"])
+        self.assertEqual(calls[0][:4], [sys.executable, "-m", "pip", "install"])
+        self.assertIn(packages[0], calls[0])
+        self.assertEqual(calls[1], ["git", "clone", "--quiet", repo, repo_dir])
+        self.assertEqual(
+            calls[2], ["git", "-C", repo_dir, "checkout", "--quiet", ref]
+        )
+        run_cmd = calls[3]
+        self.assertEqual(run_cmd[0], sys.executable)
+        self.assertEqual(run_cmd[1], f"{repo_dir}/scripts/colab_run.py")
+        self.assertEqual(run_cmd[2:4], ["run", "--jobs"])
+        self.assertIn(run_dir, run_cmd)
+        self.assertEqual(calls[4], [sys.executable, run_cmd[1], "bundle", "--out", run_dir])
+
+        jobs_written = json.loads(
+            Path(str(namespace["JOBS_FILE"])).read_text(encoding="utf-8")
+        )
+        self.assertEqual(jobs_written["jobs"], self.jobs)
 
     def test_build_kernel_dir_writes_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -376,6 +420,56 @@ class KaggleRunnerTests(unittest.TestCase):
             summary = self.kaggle.ingest(fetched, root / "out", ["0" * 16])
             self.assertEqual(summary["ingested"], [])
             self.assertEqual(summary["missing"], ["0" * 16])
+
+    def test_cmd_run_ingests_partial_output_when_kernel_fails(self) -> None:
+        jobs = [
+            {"model": "naive", "series": [1.0, 2.0, 3.0], "horizon": 1},
+            {"model": "naive", "series": [4.0, 5.0, 6.0], "horizon": 1},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(json.dumps({"jobs": jobs}), encoding="utf-8")
+            out = root / "out"
+            fetched = root / "fetched"
+            fetched.mkdir()
+            pending, _ = self.kaggle.partition_jobs(jobs, out)
+            measured_key = pending[0][2]
+            (fetched / f"{measured_key}.json").write_text(
+                json.dumps({"cache_key": measured_key, "model": "naive"}),
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                jobs=str(jobs_file),
+                out=str(out),
+                ref="deadbeef",
+                repo="https://example.invalid/repo.git",
+                workdir=str(root / "kernel"),
+                owner="alice",
+                slug=None,
+                title=None,
+                run_name=None,
+                pip=[],
+                dataset_source=[],
+                fetch_dest=str(fetched),
+                timeout=1.0,
+                interval=0.01,
+                dry_run=False,
+                cpu=False,
+                no_internet=False,
+            )
+            with (
+                mock.patch.object(self.kaggle, "run_command", return_value=0),
+                mock.patch.object(
+                    self.kaggle,
+                    "poll_until_done",
+                    side_effect=RuntimeError("kernel ended: ERROR"),
+                ),
+            ):
+                exit_code = self.kaggle.cmd_run(args)
+
+            self.assertEqual(exit_code, 1)
+            self.assertTrue((out / f"{measured_key}.json").exists())
 
 
 if __name__ == "__main__":

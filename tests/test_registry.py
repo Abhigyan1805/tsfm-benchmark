@@ -164,6 +164,16 @@ def test_shipped_tsfm_entries_pin_weights_and_revision() -> None:
         assert registry.spec(key).revision.strip()
 
 
+def test_tsfm_wrapper_defaults_match_manifest_weights() -> None:
+    from tsbench.models.tsfm.chronos import DEFAULT_MODEL_ID, ChronosBolt
+    from tsbench.models.tsfm.timesfm import TimesFM25
+
+    registry = load_registry(MODELS_CONFIG)
+    assert ChronosBolt().model_id == registry.spec("chronos_bolt").weights
+    assert ChronosBolt().model_id == DEFAULT_MODEL_ID
+    assert TimesFM25().model_id == registry.spec("timesfm25").weights
+
+
 def test_missing_license_is_refused(tmp_path: Path) -> None:
     entry = _entry("some.module:Model", family="baseline")
     del entry["license"]

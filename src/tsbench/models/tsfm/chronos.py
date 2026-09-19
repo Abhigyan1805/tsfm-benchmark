@@ -20,7 +20,7 @@ from tsbench.models.tsfm import (
 
 __all__ = ["ChronosBolt"]
 
-DEFAULT_MODEL_ID = "amazon/chronos-bolt-small"
+DEFAULT_MODEL_ID = "amazon/chronos-bolt-base"
 
 
 def _load_pipeline_class() -> Any:

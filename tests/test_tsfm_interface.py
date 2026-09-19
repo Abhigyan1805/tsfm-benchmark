@@ -64,7 +64,7 @@ def _sine(n: int = 24) -> list[float]:
 class LicenseGateTests(unittest.TestCase):
     def test_default_models_are_the_approved_lines(self) -> None:
         self.assertEqual(TimesFM25().model_id, "google/timesfm-2.5-200m-pytorch")
-        self.assertEqual(ChronosBolt().model_id, "amazon/chronos-bolt-small")
+        self.assertEqual(ChronosBolt().model_id, "amazon/chronos-bolt-base")
         self.assertIn(TimesFM25().model_id, TIMESFM_APPROVED)
         self.assertIn(ChronosBolt().model_id, CHRONOS_VERIFIED)
 

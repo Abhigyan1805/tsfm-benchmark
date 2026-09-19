@@ -476,10 +476,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     if push_code != 0:
         return push_code
-    status = poll_until_done(kernel_id, args.timeout, args.interval, args.dry_run)
-    if any(state in status.upper() for state in FAILED_STATES):
-        print(f"run: kernel ended {status}", file=sys.stderr)
+    try:
+        status = poll_until_done(kernel_id, args.timeout, args.interval, args.dry_run)
+    except TimeoutError as exc:
+        print(f"run: {exc}", file=sys.stderr)
         return 1
+    except RuntimeError as exc:
+        print(f"run: {exc}", file=sys.stderr)
+        status = "ERROR"
+    kernel_failed = any(state in status.upper() for state in FAILED_STATES)
     dest = Path(args.fetch_dest) if args.fetch_dest else workdir / "output"
     dest.mkdir(parents=True, exist_ok=True)
     fetch_code = run_command(
@@ -490,13 +495,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         return fetch_code
     if args.dry_run:
         print("run: dry-run complete; skipped ingest")
-        return 0
+        return 1 if kernel_failed else 0
     summary = ingest(dest, Path(args.out), keys)
     print(
         f"run: ingested={len(summary['ingested'])} "
         f"skipped={len(summary['skipped'])} missing={len(summary['missing'])}"
     )
-    return 1 if summary["missing"] else 0
+    return 1 if (kernel_failed or summary["missing"]) else 0
 
 
 def _add_batch_arguments(parser: argparse.ArgumentParser) -> None:
