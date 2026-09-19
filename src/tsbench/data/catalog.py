@@ -17,7 +17,6 @@ from typing import Any
 import yaml
 
 from .loaders import (
-    ChecksumError,
     DataError,
     DownloadError,
     download_file,
@@ -206,10 +205,12 @@ def ensure_dataset(
 ) -> Path | None:
     """Return a local path to ``spec``'s data, downloading when permitted.
 
-    Returns ``None`` when the data is absent and cannot be fetched (such as no
-    network); the caller is responsible for surfacing the dataset as
-    PRELIMINARY. Raises :class:`ChecksumError` when present-but-tampered data
-    fails verification.
+    Recoverable failures return ``None`` so the caller can surface the dataset
+    as PRELIMINARY: the data is absent, downloads are not permitted, or the
+    fetch itself fails (such as no network, a :class:`DownloadError`). Fatal
+    failures raise instead: present-but-tampered data or a downloaded archive
+    failing pinned verification (:class:`ChecksumError`) must never be treated
+    as acceptable and silently marked preliminary.
     """
     base = Path(root)
     target = _resolve_spec_path(spec, base)
@@ -234,8 +235,8 @@ def ensure_dataset(
         extract_zip_member(archive, spec.member_filename, target)
         if verify and spec.member_sha256:
             verify_checksums(target, sha256=spec.member_sha256)
-    except (DownloadError, ChecksumError):
-        raise
+    except DownloadError:
+        return None
     return target
 
 

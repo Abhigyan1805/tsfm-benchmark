@@ -138,7 +138,11 @@ def materialize(config: str | Path, *, root: str | Path = ".") -> dict:
     out: dict[str, object] = {"version": metadata.get("version"), "datasets": {}}
     for name, spec in specs.items():
         target = ensure_dataset(spec, root=root, allow_download=True)
-        entry = {"path": str(target), "sha256": None, "preliminary": False}
+        entry = {
+            "path": str(target) if target is not None else None,
+            "sha256": None,
+            "preliminary": False,
+        }
         if target is not None and target.is_file():
             entry["sha256"] = sha256_file(target)
         else:
