@@ -169,14 +169,17 @@ def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: in
     entrypoint = model_cfg.get("entrypoint")
     registry = _try_registry()
     if registry is not None and name in registry:
-        registered = registry.spec(name).entrypoint
+        registry_spec = registry.spec(name)
         try:
-            target = _entrypoint_target(name, registered)
+            target = _entrypoint_target(name, registry_spec.entrypoint)
         except RunnerError as exc:
             if not entrypoint:
                 raise RunnerError(
                     f"model {name!r}: registry entrypoint is unavailable: {exc}"
                 ) from exc
+            from ..registry import check_license
+
+            check_license(registry_spec)
         else:
             return registry.instantiate(
                 name, **_seed_kwargs(kwargs, target, model_cfg=model_cfg, seed=seed)

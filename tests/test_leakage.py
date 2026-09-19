@@ -99,6 +99,25 @@ def test_scaler_that_fits_on_context_plus_target_is_rejected():
     assert "center" in audit.detail
 
 
+def test_scaler_that_ignores_its_fitted_window_is_rejected():
+    _, context, target, origin = _window()
+
+    class InputBlindScaler:
+        """Reports the context mean no matter which window it is fit on."""
+
+        def fit(self, values, origin=None):
+            self.center = float(np.mean(context))
+            self.scale = 1.0
+            return self
+
+    audit = assert_context_only_scaling(
+        context, target, scaler_factory=InputBlindScaler, origin=origin
+    )
+    assert audit.passed is False
+    assert audit.name == "context_scaling"
+    assert "window" in audit.detail
+
+
 def test_scaler_refuses_to_re_derive_at_future_indices():
     _, context, target, origin = _window()
     scaler = ContextScaler().fit(context, origin=origin)
