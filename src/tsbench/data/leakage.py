@@ -167,14 +167,19 @@ def assert_context_only_scaling(
     combined = np.concatenate([context, target])
     scaler_on_combined = factory()
     scaler_on_combined.fit(combined)
-    combined_center = float(np.mean(combined))
-    if abs(combined_center - center) > 1e-9:
-        # A genuine leakage signal: if using the target changes the statistic,
-        # the audit's job is to refuse to use the combined statistic.
+    combined_mean = float(np.mean(combined))
+    combined_center = _extract_center(scaler_on_combined)
+    if (
+        combined_center is not None
+        and abs(combined_mean - center) > 1e-9
+        and abs(combined_center - center) <= 1e-9
+    ):
         return LeakageAudit(
             "context_scaling",
-            True,
-            "context-only statistics are disjoint from target-inclusive statistics",
+            False,
+            "scaler fitted on the context+target window still reports the "
+            f"context-only statistic {combined_center}; it does not derive "
+            "statistics from the window it is fitted on",
         )
     return LeakageAudit("context_scaling", True, "scaler derived from context only")
 

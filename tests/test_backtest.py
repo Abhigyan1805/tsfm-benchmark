@@ -739,6 +739,42 @@ def test_config_entrypoint_is_used_when_the_registry_entrypoint_is_absent(
     assert isinstance(model, NaiveStub)
 
 
+def test_config_entrypoint_fallback_still_honors_the_registry_license_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import yaml
+
+    from tsbench.registry import LicenseError, load_registry
+
+    models_path = tmp_path / "models.yaml"
+    models_path.write_text(
+        yaml.safe_dump(
+            {
+                "models": {
+                    "gated": {
+                        "entrypoint": "tsbench.models.not_landed:Gated",
+                        "family": "baseline",
+                        "zero_shot": True,
+                        "license": "CC-BY-NC-4.0",
+                        "revision": "test-pin",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = load_registry(models_path)
+    monkeypatch.setattr(runner, "_try_registry", lambda: registry)
+    monkeypatch.delenv("TSBENCH_ALLOW_NONCOMMERCIAL", raising=False)
+    with pytest.raises(LicenseError):
+        runner._build_model(
+            "gated",
+            None,
+            model_cfg={"entrypoint": "tests._stub_models:NaiveStub"},
+            seed=None,
+        )
+
+
 def test_registry_baselines_construct_through_runner_with_a_seed(
     monkeypatch: pytest.MonkeyPatch,
 ):
