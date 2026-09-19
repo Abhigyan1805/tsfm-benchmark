@@ -900,3 +900,51 @@ def test_runner_translates_a_missing_catalogue_to_runner_error(tmp_path: Path):
     with pytest.raises(runner.RunnerError, match="dataset catalogue not found"):
         runner.run_experiment(config_path, root=tmp_path)
 
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"split": {"train_frac": 0.5, "val_frac": 0.2, "test_frac": 0.2}},
+        {"split": {"context_length": 20, "horizon": 4, "stride": 0}},
+        {"season_length": "not-an-int"},
+    ],
+)
+def test_runner_translates_config_parse_failures_to_runner_error(
+    tmp_path: Path, overrides: dict
+):
+    import yaml
+
+    config = {
+        "name": "bad-config",
+        "dataset": {"name": "smoke", "loader": "local_csv"},
+        "models": ["naive"],
+        "split": {"context_length": 20, "horizon": 4},
+    }
+    config.update(overrides)
+    config_path = tmp_path / "bad.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(runner.RunnerError):
+        runner.run_experiment(config_path, root=tmp_path)
+
+
+def test_cli_reports_invalid_config_without_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+):
+    import yaml
+
+    from tsbench.cli import main
+
+    config = {
+        "name": "bad-config",
+        "dataset": {"name": "smoke", "loader": "local_csv"},
+        "models": ["naive"],
+        "split": {"train_frac": 0.5, "val_frac": 0.2, "test_frac": 0.2},
+    }
+    config_path = tmp_path / "bad.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    exit_code = main(["run", "--config", str(config_path)])
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "error:" in captured.err
+    assert "Traceback" not in captured.err
+

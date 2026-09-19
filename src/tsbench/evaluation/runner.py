@@ -91,6 +91,9 @@ class ExperimentConfig:
         if not isinstance(models, Sequence) or isinstance(models, (str, bytes)):
             raise RunnerError(f"{source}: 'models' must be a list")
         split = SplitConfig.from_mapping(raw.get("split"))
+        seed = raw.get("seed")
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
+            raise RunnerError(f"{source}: 'seed' must be an integer, got {seed!r}")
         override = os.environ.get(RESULTS_DIR_ENV)
         output_dir = Path(override or raw.get("output_dir") or DEFAULT_RESULTS_DIR)
         manifest = raw.get("split_manifest") or dataset.get("split_manifest")
@@ -101,7 +104,7 @@ class ExperimentConfig:
             models=[str(m) for m in models],
             split=split,
             output_dir=output_dir,
-            seed=raw.get("seed"),
+            seed=seed,
             season_length=int(raw.get("season_length", 1)),
             datasets_config=Path(raw.get("datasets_config", DEFAULT_DATASETS_CONFIG)),
             split_manifest=Path(manifest) if manifest else None,
@@ -117,7 +120,12 @@ def load_experiment(path: str | Path) -> ExperimentConfig:
         document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise RunnerError(f"{config_path}: invalid YAML: {exc}") from exc
-    return ExperimentConfig.from_mapping(document or {}, source=str(config_path))
+    try:
+        return ExperimentConfig.from_mapping(document or {}, source=str(config_path))
+    except RunnerError:
+        raise
+    except (SplitError, ValueError, TypeError) as exc:
+        raise RunnerError(f"{config_path}: {exc}") from exc
 
 
 def _load_series(
