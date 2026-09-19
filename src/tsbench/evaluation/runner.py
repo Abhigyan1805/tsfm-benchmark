@@ -19,6 +19,7 @@ branch where the foundation and model slices have not landed yet.
 from __future__ import annotations
 
 import importlib
+import inspect
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -166,50 +167,81 @@ def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: in
     does not know may declare their own entrypoint.
     """
     kwargs = dict(model_cfg.get("kwargs") or {})
-    if seed is not None and kwargs.get("seed") is None and model_cfg.get("seed", True):
-        kwargs.setdefault("seed", seed)
     entrypoint = model_cfg.get("entrypoint")
     registry = _try_registry()
     if registry is not None and name in registry:
-        import_error = _model_import_error()
-        if import_error is not None:
-            try:
-                return registry.instantiate(name, **kwargs)
-            except import_error as exc:
-                if not entrypoint:
-                    raise RunnerError(
-                        f"model {name!r}: registry entrypoint is unavailable: {exc}"
-                    ) from exc
+        registered = registry.spec(name).entrypoint
+        try:
+            target = _entrypoint_target(name, registered)
+        except RunnerError as exc:
+            if not entrypoint:
+                raise RunnerError(
+                    f"model {name!r}: registry entrypoint is unavailable: {exc}"
+                ) from exc
         else:
-            return registry.instantiate(name, **kwargs)
+            return registry.instantiate(
+                name, **_seed_kwargs(kwargs, target, model_cfg=model_cfg, seed=seed)
+            )
     if entrypoint:
-        return _construct_entrypoint(name, entrypoint, kwargs)
+        target = _entrypoint_target(name, entrypoint)
+        seeded = _seed_kwargs(kwargs, target, model_cfg=model_cfg, seed=seed)
+        return target(**seeded) if seeded else target()
     raise RunnerError(
         f"model {name!r}: no entrypoint in the experiment config and no registry "
         "entry available"
     )
 
 
-def _construct_entrypoint(name: str, entrypoint: Any, kwargs: Mapping[str, Any]) -> Any:
+def _entrypoint_target(name: str, entrypoint: Any) -> Any:
+    """Resolve ``module:attribute`` to a callable, or raise ``RunnerError``."""
     module_name, _, attribute = str(entrypoint).partition(":")
     try:
         module = importlib.import_module(module_name)
-    except ImportError as exc:
+    except Exception as exc:
         raise RunnerError(f"model {name!r}: cannot import {module_name!r}: {exc}") from exc
     target = getattr(module, attribute, None)
     if target is None:
         raise RunnerError(f"model {name!r}: {entrypoint!r} has no {attribute!r}")
-    return target(**kwargs) if kwargs else target()
+    return target
 
 
-def _model_import_error() -> type[BaseException] | None:
-    """The registry's ``ModelImportError``, or ``None`` if it is unavailable."""
+def _seed_kwargs(
+    kwargs: Mapping[str, Any],
+    target: Any,
+    *,
+    model_cfg: Mapping[str, Any],
+    seed: int | None,
+) -> dict[str, Any]:
+    """Forward the run seed only when the target accepts it.
+
+    Deterministic baselines must not receive an unsupported ``seed`` kwarg. The
+    run seed is added only when the constructor signature accepts it or when
+    ``model_configs.<model>.seed`` explicitly opts in; an explicit ``false``
+    always suppresses it.
+    """
+    resolved = dict(kwargs)
+    if seed is None or resolved.get("seed") is not None:
+        return resolved
+    requested = model_cfg.get("seed")
+    if requested is False:
+        return resolved
+    if requested is True or _accepts_kwarg(target, "seed"):
+        resolved.setdefault("seed", seed)
+    return resolved
+
+
+def _accepts_kwarg(target: Any, name: str) -> bool:
+    """True when ``target`` can be called with the keyword ``name``."""
     try:
-        module = importlib.import_module("tsbench.registry")
-    except ImportError:
-        return None
-    error = getattr(module, "ModelImportError", None)
-    return error if isinstance(error, type) and issubclass(error, BaseException) else None
+        parameters = inspect.signature(target).parameters
+    except (TypeError, ValueError):
+        return False
+    if name in parameters:
+        return True
+    return any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
 
 
 def _try_registry() -> Any | None:
