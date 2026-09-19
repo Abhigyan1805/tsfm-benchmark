@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import dataclasses
 import hashlib
 import importlib
 import importlib.util
@@ -172,6 +173,16 @@ def _metrics(predictions: list[float], holdout: list[float]) -> dict[str, float]
     return {"mae": mae, "rmse": rmse, "n": len(errors)}
 
 
+def _model_info(model: Any) -> dict[str, Any]:
+    """Serialize ``model.info()`` into a JSON-object-shaped mapping."""
+    if not hasattr(model, "info"):
+        return {}
+    info = model.info()
+    if dataclasses.is_dataclass(info) and not isinstance(info, type):
+        return dataclasses.asdict(info)
+    return dict(info)
+
+
 def execute_job(job: dict[str, Any], series: list[float], key: str) -> dict[str, Any]:
     horizon = int(job["horizon"])
     if horizon < 1:
@@ -215,7 +226,7 @@ def execute_job(job: dict[str, Any], series: list[float], key: str) -> dict[str,
             "fit_seconds": fit_seconds,
             "predict_seconds": predict_seconds,
         },
-        "info": model.info() if hasattr(model, "info") else {},
+        "info": _model_info(model),
         "created_at": _utc_now(),
     }
 

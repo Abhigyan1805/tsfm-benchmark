@@ -232,6 +232,48 @@ class ColabRunnerTests(unittest.TestCase):
             )
             self.assertIn(os.path.basename(path), os.listdir(out))
 
+    def test_execute_job_persists_structured_info(self) -> None:
+        colab_run = _load_colab_run()
+
+        class FakeModel:
+            def __init__(self, **_):
+                pass
+
+            def fit(self, series):
+                return self
+
+            def predict(self, horizon):
+                return [0.0] * horizon
+
+            def info(self):
+                return FrozenModelInfo(
+                    "fake",
+                    "baseline",
+                    True,
+                    3,
+                    "Apache-2.0",
+                    "rev:1",
+                    {"model_id": "fake/model"},
+                )
+
+        job = {"entry": "fake:FakeModel", "horizon": 2}
+        series = [1.0, 2.0, 3.0, 4.0]
+        key = colab_run.cache_key(job, series)
+        with mock.patch.object(colab_run, "load_entry", return_value=FakeModel):
+            result = colab_run.execute_job(job, series, key)
+
+        self.assertIsInstance(result["info"], dict)
+        self.assertEqual(result["info"]["name"], "fake")
+        self.assertEqual(result["info"]["revision"], "rev:1")
+        self.assertEqual(result["info"]["extra"]["model_id"], "fake/model")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / f"{key}.json"
+            colab_run.write_json_atomic(path, result)
+            reloaded = json.loads(path.read_text(encoding="utf-8"))
+        self.assertIsInstance(reloaded["info"], dict)
+        self.assertEqual(reloaded["info"]["params"], 3)
+
 
 class EndpointTests(unittest.TestCase):
     def setUp(self) -> None:
