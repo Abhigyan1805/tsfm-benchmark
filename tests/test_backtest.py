@@ -674,3 +674,63 @@ def test_config_entrypoint_is_used_when_the_registry_entrypoint_is_absent(
         seed=None,
     )
     assert isinstance(model, NaiveStub)
+
+
+def test_registry_baselines_construct_through_runner_with_a_seed(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """A top-level seed must not crash baselines that reject the kwarg."""
+    from tsbench.models.naive import Naive, SeasonalNaive
+    from tsbench.registry import load_registry
+
+    repo_root = Path(__file__).resolve().parents[1]
+    registry = load_registry(repo_root / "configs" / "models.yaml")
+    monkeypatch.setattr(runner, "_try_registry", lambda: registry)
+
+    naive = runner._build_model("naive", None, model_cfg={}, seed=20240919)
+    assert isinstance(naive, Naive)
+    naive.fit(np.array([1.0, 2.0, 3.0]))
+    assert np.allclose(naive.predict(2), [3.0, 3.0])
+
+    seasonal = runner._build_model(
+        "seasonal_naive",
+        None,
+        model_cfg={"kwargs": {"season_length": 24}},
+        seed=20240919,
+    )
+    assert isinstance(seasonal, SeasonalNaive)
+    assert seasonal.season_length == 24
+
+
+def test_seed_is_forwarded_only_when_the_constructor_accepts_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import yaml
+
+    from tsbench.registry import load_registry
+
+    models_path = tmp_path / "models.yaml"
+    models_path.write_text(
+        yaml.safe_dump(
+            {
+                "models": {
+                    "stub": {
+                        "entrypoint": "tests._stub_models:NaiveStub",
+                        "family": "baseline",
+                        "zero_shot": True,
+                        "license": "Apache-2.0",
+                        "revision": "test-pin",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = load_registry(models_path)
+    monkeypatch.setattr(runner, "_try_registry", lambda: registry)
+
+    seeded = runner._build_model("stub", None, model_cfg={}, seed=7)
+    assert seeded.extra["seed"] == 7
+
+    suppressed = runner._build_model("stub", None, model_cfg={"seed": False}, seed=7)
+    assert "seed" not in suppressed.extra
