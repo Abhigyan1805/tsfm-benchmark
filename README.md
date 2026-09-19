@@ -7,12 +7,12 @@ forecasters across forecasting horizons — measured on accuracy *and* inference
 with a partial reproduction of the TimesFM evaluation methodology, producing an
 accuracy-vs-cost Pareto frontier rather than a single leaderboard row.
 
-**Status:** P0 foundation in place — packaging, configs, model registry with license
-gate, CI, and the smoke wiring. The local model tier landed: naive and seasonal-naive
-floors, classical ETS/ARIMA, and the XGBoost lag-feature baseline. The data/evaluation
-spine and the GPU tier land in parallel slices. `make smoke` becomes executable
-end-to-end once the data/evaluation slice is merged; on this branch it fails with an
-explicit `error: cannot execute experiments` message.
+**Status:** P0 foundation, the local model tier, and the data/evaluation spine are in
+place — packaging, configs, the license-gated model registry, naive and seasonal-naive
+floors, classical ETS/ARIMA, the XGBoost lag-feature baseline, the electricity-demand
+data layer with frozen leakage-audited splits, metrics, rolling-origin backtest,
+results schema, paired statistics, and CI. `make smoke` runs end-to-end on the
+committed fixture with a test-stub forecaster; the GPU tier lands in a parallel slice.
 
 ## Quickstart
 
@@ -34,7 +34,7 @@ make lint
 | `make test` | run the pytest suite |
 | `make lint` | run ruff |
 | `make smoke` | tiny end-to-end run: `python -m tsbench run --config configs/experiments/smoke.yaml` over `tests/fixtures/smoke_series.csv` through the `local_csv` loader |
-| `make data` | fetch/prepare datasets declared in `configs/datasets.yaml` |
+| `make data` | dataset target stub; materialize the catalogue with `python -m tsbench.data.build_catalog --materialize` (see `data/manifests/PROVENANCE.md`) |
 | `make backtest` | rolling-origin backtest (`configs/experiments/backtest.yaml`) |
 | `make deep` | LSTM / small Transformer run (`configs/experiments/deep.yaml`) |
 | `make tsfm` | TimesFM 2.5 / Chronos-Bolt zero-shot run (`configs/experiments/tsfm.yaml`) |
@@ -42,8 +42,9 @@ make lint
 | `make licenses` | print the model license manifest from `configs/models.yaml` |
 | `make reproduce` | rerun the documented end-to-end path |
 
-Every stage is dispatched through `python -m tsbench run --config <experiment.yaml>`;
-configs for later phases land with their slices. CI runs the same commands the
+Experiment stages are dispatched through `python -m tsbench run --config <experiment.yaml>`;
+dataset materialization runs through `python -m tsbench.data.build_catalog --materialize`,
+and configs for later phases land with their slices. CI runs the same commands the
 quickstart does: `ruff check .` and `python -m pytest`.
 
 ## Frozen interfaces
@@ -97,7 +98,7 @@ src/tsbench/registry.py        manifest validation + license-gated factory
 src/tsbench/cli.py             python -m tsbench run|licenses
 src/tsbench/data/              dataset loaders and splits (data slice)
 src/tsbench/models/            model implementations (model and GPU slices)
-src/tsbench/evaluation/        metrics, backtest, runner, report (data slice)
+src/tsbench/evaluation/        metrics, backtest, stats, results, runner (data slice)
 tests/                         pytest suite and the smoke fixture
 ```
 
