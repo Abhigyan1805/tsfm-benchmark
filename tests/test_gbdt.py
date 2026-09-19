@@ -115,6 +115,23 @@ def test_datetime_index_produces_calendar_features_and_future_predictions():
     assert np.all(np.isfinite(forecast))
 
 
+def test_hourly_series_feature_count_is_stable_at_midnight_origin():
+    index = pd.date_range("2020-01-01 00:00", periods=24, freq="h")
+    y = pd.Series(np.arange(24, dtype=np.float64), index=index)
+    model = _model(lags=(1, 2, 3), use_calendar=True).fit(y)
+    assert model.info().extra["calendar_mode"] == "datetime"
+    forecast = model.predict(3)
+    assert forecast.shape == (3,)
+    assert np.all(np.isfinite(forecast))
+
+
+def test_two_point_datetime_series_falls_back_to_last_value():
+    y = pd.Series([1.0, 2.0], index=pd.date_range("2020-01-01", periods=2, freq="D"))
+    model = _model(lags=(1, 2, 5), use_calendar=True).fit(y)
+    assert model.info().extra["fallback"] == "insufficient_history_for_lags"
+    np.testing.assert_array_equal(model.predict(3), [2.0, 2.0, 2.0])
+
+
 def test_positional_features_when_index_is_not_datetime():
     y = pd.Series(_seasonal_series(), index=np.arange(len(_seasonal_series())) + 100)
     model = _model(use_calendar=True).fit(y)

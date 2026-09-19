@@ -46,6 +46,7 @@ class _CalendarIndex:
             self.index = None
         self.size = int(size)
         self.freq = self._infer_freq()
+        self.include_time_of_day = self._detect_time_of_day()
 
     @property
     def mode(self) -> str:
@@ -53,10 +54,20 @@ class _CalendarIndex:
             return "position"
         return "datetime"
 
+    def _detect_time_of_day(self) -> bool:
+        if self.index is None or self.freq is None:
+            return False
+        hour = self.index.hour.to_numpy()
+        minute = self.index.minute.to_numpy()
+        return bool(np.any(hour != 0)) or bool(np.any(minute != 0))
+
     def _infer_freq(self) -> Any:
         if self.index is None or self.size < 2:
             return None
-        inferred = pd.infer_freq(self.index)
+        try:
+            inferred = pd.infer_freq(self.index)
+        except ValueError:
+            inferred = None
         if inferred is not None:
             return pd.tseries.frequencies.to_offset(inferred)
         deltas = pd.Series(self.index).diff().dropna()
@@ -93,9 +104,8 @@ class _CalendarIndex:
             timestamps.month.to_numpy(dtype=np.float64),
         ]
         names = ["doy_sin", "doy_cos", "dow", "month"]
-        hour = timestamps.hour.to_numpy(dtype=np.float64)
-        minute = timestamps.minute.to_numpy(dtype=np.float64)
-        if bool(np.any(hour != 0)) or bool(np.any(minute != 0)):
+        if self.include_time_of_day:
+            hour = timestamps.hour.to_numpy(dtype=np.float64)
             hour_angle = 2.0 * np.pi * hour / 24.0
             columns.extend([np.sin(hour_angle), np.cos(hour_angle)])
             names.extend(["hod_sin", "hod_cos"])
