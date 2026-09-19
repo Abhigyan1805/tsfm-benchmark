@@ -368,7 +368,11 @@ def friedman_test(
         _, counts = np.unique(ranks[:, j], return_counts=True)
         tie_sum += float(np.sum(counts**3 - counts))
     if tie_sum > 0:
-        statistic /= 1.0 - tie_sum / (n * (k**3 - k))
+        denominator = 1.0 - tie_sum / (n * (k**3 - k))
+        if denominator > 0:
+            statistic /= denominator
+        else:
+            statistic = 0.0
     p_value = _chi_square_sf(statistic, k - 1)
     return FriedmanResult(
         models=models,

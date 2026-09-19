@@ -68,24 +68,33 @@ class WindowForecast:
         return self.error is None
 
 
-def measure_peak_memory(*, enabled: bool = True) -> tuple[float | None, Callable[[], float | None]]:
-    """Start peak-memory tracking; return ``(baseline_mb, stop_mb)``.
+def measure_peak_memory(
+    *, enabled: bool = True
+) -> tuple[Callable[[], None], Callable[[], float | None]]:
+    """Start peak-memory tracking; return ``(start_window, stop_window)``.
 
-    ``tracemalloc`` is process-global, so callers enable it once per run and
-    read the peak around each fit/predict pair. When disabled, both halves
-    return ``None`` and no overhead is paid.
+    ``tracemalloc`` is process-global and its peak accumulates since tracing
+    started, so a single global peak would smear the largest window across every
+    later row. ``start_window`` re-baselines and resets the peak; ``stop_window``
+    returns megabytes allocated at peak since that call. When disabled, both
+    halves are no-ops and no overhead is paid.
     """
     if not enabled:
-        return None, lambda: None
+        return (lambda: None), (lambda: None)
     if not tracemalloc.is_tracing():
         tracemalloc.start()
-    baseline = tracemalloc.get_traced_memory()[1] / (1024 * 1024)
+    baseline_mb = tracemalloc.get_traced_memory()[0] / (1024 * 1024)
 
-    def stop() -> float | None:
-        current, peak = tracemalloc.get_traced_memory()
-        return max(0.0, peak / (1024 * 1024) - baseline)
+    def start_window() -> None:
+        nonlocal baseline_mb
+        baseline_mb = tracemalloc.get_traced_memory()[0] / (1024 * 1024)
+        tracemalloc.reset_peak()
 
-    return baseline, stop
+    def stop_window() -> float | None:
+        _current, peak = tracemalloc.get_traced_memory()
+        return max(0.0, peak / (1024 * 1024) - baseline_mb)
+
+    return start_window, stop_window
 
 
 def backtest_windows(
@@ -112,10 +121,11 @@ def backtest_windows(
         model_builder, model_name=model_name, family=family
     )
     windows = iter_windows(series, plan, period=period)
-    _, stop_memory = measure_peak_memory(enabled=track_memory)
+    start_memory, stop_memory = measure_peak_memory(enabled=track_memory)
     results: list[WindowForecast] = []
     for index, (origin, context, target) in enumerate(windows):
         assert_no_future_data(plan, origin, plan.config.context_length, plan.config.horizon)
+        start_memory()
         model = model_builder()
         context_values = np.array(context, dtype=np.float64, copy=True)
         target_values = np.array(target, dtype=np.float64, copy=True)
