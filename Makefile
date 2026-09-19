@@ -12,7 +12,7 @@ smoke:
 	$(PYTHON) -m tsbench run --config configs/experiments/smoke.yaml
 
 data:
-	$(PYTHON) -m tsbench run --config configs/datasets.yaml
+	$(PYTHON) -m tsbench.data.build_catalog --materialize
 
 backtest:
 	$(PYTHON) -m tsbench run --config configs/experiments/backtest.yaml

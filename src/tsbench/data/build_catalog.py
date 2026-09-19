@@ -6,9 +6,9 @@ aggregation of the UCI ElectricityLoadDiagrams20112014 data set. The loader is
 the same Monash ``.tsf`` reader used everywhere else, so the primary dataset and
 the smoke fixture share a code path.
 
-Run ``python -m tsbench.data.build_catalog --offline`` to print the pinned
-manifest without touching the network. Downloads happen only through
-``--materialize`` and are checksum-verified, never assumed.
+Run ``python -m tsbench.data.build_catalog`` to print the pinned manifest
+without touching the network. Downloads happen only through ``--materialize``
+and are checksum-verified, never assumed.
 """
 
 from __future__ import annotations
