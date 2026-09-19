@@ -31,8 +31,8 @@ sha256 was pinned at the same time. `python -m tsbench.data.build_catalog
 ## Frozen split
 
 The split manifest is committed at
-`data/manifests/electricity_hourly_split_manifest.json` (and materialized at the
-runtime path `data/electricity_hourly/split_manifest.json`). It records, for
+`data/manifests/electricity_hourly_split_manifest.json` and referenced directly
+by `configs/datasets.yaml`; there is no separate runtime copy. It records, for
 each of the 24 evenly-spaced evaluation series (T1, T14, T27, ... T308):
 
 * series length and a sha256 over the raw float64 value block;

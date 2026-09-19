@@ -34,7 +34,7 @@ make lint
 | `make test` | run the pytest suite |
 | `make lint` | run ruff |
 | `make smoke` | tiny end-to-end run: `python -m tsbench run --config configs/experiments/smoke.yaml` over `tests/fixtures/smoke_series.csv` through the `local_csv` loader |
-| `make data` | dataset target stub; materialize the catalogue with `python -m tsbench.data.build_catalog --materialize` (see `data/manifests/PROVENANCE.md`) |
+| `make data` | fetch and checksum-verify the dataset catalogue (`python -m tsbench.data.build_catalog --materialize`; see `data/manifests/PROVENANCE.md`) |
 | `make backtest` | rolling-origin backtest (`configs/experiments/backtest.yaml`) |
 | `make deep` | LSTM / small Transformer run (`configs/experiments/deep.yaml`) |
 | `make tsfm` | TimesFM 2.5 / Chronos-Bolt zero-shot run (`configs/experiments/tsfm.yaml`) |
