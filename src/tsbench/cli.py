@@ -2,8 +2,8 @@
 
 Experiment runs are config-driven: ``python -m tsbench run --config <path>``.
 The runner itself lives in the evaluation slice
-(``tsbench.evaluation.runner.run_experiment``); the foundation branch wires
-the command and reports a clear error until that slice lands.
+(``tsbench.evaluation.runner.run_experiment``) and is imported lazily so this
+module still works when that slice is absent.
 """
 
 from __future__ import annotations
