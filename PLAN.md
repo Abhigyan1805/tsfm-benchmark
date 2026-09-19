@@ -71,8 +71,8 @@ notebooks/           exploration only, nothing load-bearing
 ```
 
 Every result row carries dataset, series id, model, family, context length, horizon,
-window index, metrics, latency, memory, params, zero-shot flag, git sha, config hash,
-measured-vs-estimated flag, and timestamp.
+window index, metrics, latency, memory, training wall-clock, params, zero-shot flag,
+git sha, config hash, measured-vs-estimated flag, and timestamp.
 
 ## 3. Experiment matrix
 

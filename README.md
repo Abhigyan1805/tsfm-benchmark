@@ -11,7 +11,7 @@ accuracy-vs-cost Pareto frontier rather than a single leaderboard row.
 gate, CI, and the smoke wiring. Model implementations, the data/evaluation spine, and
 the GPU tier land in parallel slices. `make smoke` becomes executable end-to-end once
 the model and evaluation slices are merged; on this branch it fails with an explicit
-"evaluation slice unavailable" error.
+`error: cannot execute experiments` message.
 
 ## Quickstart
 
