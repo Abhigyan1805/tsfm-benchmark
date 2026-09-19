@@ -159,13 +159,14 @@ def test_untrained_family_has_empty_train_seconds():
     assert row["train_seconds"] == ""
 
 
-def test_trained_family_records_train_seconds():
+@pytest.mark.parametrize("family", ["classical", "ml", "deep"])
+def test_trained_family_records_train_seconds(family):
     row = result_row(
         run_id="r",
         dataset="d",
         series_id="s",
-        model="lstm",
-        family="deep",
+        model="auto_ets",
+        family=family,
         context_length=48,
         horizon=12,
         window_index=0,
@@ -178,6 +179,38 @@ def test_trained_family_records_train_seconds():
         train_seconds=1.25,
     )
     assert row["train_seconds"] == 1.25
+
+
+@pytest.mark.parametrize("family", ["classical", "ml"])
+def test_backtest_records_fit_wall_clock_for_trained_families(family):
+    plan = _plan()
+    values = _series()
+    stub = type("TimedStub", (NaiveStub,), {"name": "timed", "family": family})
+
+    outcomes = backtest_windows(
+        values, plan, stub, series_id="s", model_name="timed", family=family
+    )
+    assert outcomes
+    assert all(outcome.train_seconds is not None for outcome in outcomes)
+    first = outcomes[0]
+    row = result_row(
+        run_id="r",
+        dataset="d",
+        series_id="s",
+        model="timed",
+        family=family,
+        context_length=plan.config.context_length,
+        horizon=plan.config.horizon,
+        window_index=0,
+        mae=first.metrics["mae"],
+        rmse=first.metrics["rmse"],
+        mase=first.metrics["mase"],
+        smape=first.metrics["smape"],
+        git_sha="sha",
+        config_hash="cfg",
+        train_seconds=first.train_seconds,
+    )
+    assert row["train_seconds"] != ""
 
 
 def test_schema_drift_is_rejected():
