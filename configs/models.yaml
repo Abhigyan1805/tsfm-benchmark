@@ -22,7 +22,7 @@ models:
     params: null
     license: Apache-2.0
     revision: TBD-at-download
-    notes: statsforecast AutoETS; parameter count is selected per series.
+    notes: AutoETS via statsforecast, with a documented statsmodels AIC-grid fallback when statsforecast reports the series unsupported; parameter count is selected per series. The engine that ran is recorded per result row in info().extra["engine"].
   auto_arima:
     entrypoint: tsbench.models.stats:AutoARIMA
     family: classical
@@ -30,7 +30,7 @@ models:
     params: null
     license: Apache-2.0
     revision: TBD-at-download
-    notes: statsforecast AutoARIMA; parameter count is selected per series.
+    notes: AutoARIMA via statsforecast, with a documented statsmodels AIC-grid fallback when statsforecast reports the series unsupported; parameter count is selected per series. The engine that ran is recorded per result row in info().extra["engine"].
   xgboost_lags:
     entrypoint: tsbench.models.gbdt:XGBoostLags
     family: ml
