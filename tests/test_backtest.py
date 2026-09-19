@@ -416,6 +416,36 @@ def test_wilcoxon_requires_shared_series():
         stats.wilcoxon_signed_rank({"a": 1.0}, {"b": 1.0})
 
 
+def test_wilcoxon_one_sided_less_evaluates_the_exact_tail():
+    # Ties in the absolute differences exercise the averaged-rank null.
+    a = {0: 10, 1: 12, 2: 15, 3: 20, 4: 26, 5: 33, 6: 41, 7: 50}
+    b = {0: 11, 1: 10, 2: 16, 3: 18, 4: 29, 5: 30, 6: 44, 7: 46}
+    less = stats.wilcoxon_signed_rank(a, b, alternative="less")
+    assert less.method == "exact"
+    assert less.p_value == pytest.approx(0.66796875)
+    # The two-sided default is unchanged.
+    assert stats.wilcoxon_signed_rank(a, b).p_value == pytest.approx(0.6953125)
+
+
+def test_wilcoxon_one_sided_greater_evaluates_the_exact_tail():
+    a = {i: float(v) for i, v in enumerate([-1, -2, 3, -4, -5, -6, -7, -8])}
+    b = {i: 0.0 for i in range(8)}
+    greater = stats.wilcoxon_signed_rank(a, b, alternative="greater")
+    assert greater.method == "exact"
+    assert greater.p_value == pytest.approx(0.98828125)
+    less = stats.wilcoxon_signed_rank(a, b, alternative="less")
+    assert less.p_value == pytest.approx(0.01953125)
+
+
+def test_wilcoxon_rejects_an_unknown_alternative():
+    with pytest.raises(stats.StatsError, match="unknown alternative"):
+        stats.wilcoxon_signed_rank(
+            {f"s{i}": float(i) for i in range(4)},
+            {f"s{i}": float(i) + 1 for i in range(4)},
+            alternative="both",
+        )
+
+
 def test_friedman_test_and_critical_difference():
     scores = {
         "m1": {f"s{i}": float(i) for i in range(10)},
@@ -734,3 +764,46 @@ def test_seed_is_forwarded_only_when_the_constructor_accepts_it(
 
     suppressed = runner._build_model("stub", None, model_cfg={"seed": False}, seed=7)
     assert "seed" not in suppressed.extra
+
+
+def test_runner_translates_a_missing_manifest_to_runner_error(tmp_path: Path):
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[1]
+    config = {
+        "name": "missing-manifest",
+        "dataset": {"name": "smoke", "loader": "local_csv"},
+        "split_manifest": str(tmp_path / "does_not_exist.json"),
+        "models": ["naive"],
+        "split": {
+            "train_frac": 0.6,
+            "val_frac": 0.2,
+            "test_frac": 0.2,
+            "context_length": 20,
+            "horizon": 4,
+            "stride": 4,
+            "min_train_size": 5,
+        },
+        "datasets_config": str(repo_root / "configs" / "datasets.yaml"),
+    }
+    config_path = tmp_path / "missing.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(runner.RunnerError, match="split manifest not found"):
+        runner.run_experiment(config_path, root=repo_root)
+
+
+def test_runner_translates_a_missing_catalogue_to_runner_error(tmp_path: Path):
+    import yaml
+
+    config = {
+        "name": "missing-catalogue",
+        "dataset": {"name": "electricity_hourly"},
+        "models": ["naive"],
+        "split": {"context_length": 20, "horizon": 4},
+        "datasets_config": str(tmp_path / "no_such_catalogue.yaml"),
+    }
+    config_path = tmp_path / "missing_catalogue.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with pytest.raises(runner.RunnerError, match="dataset catalogue not found"):
+        runner.run_experiment(config_path, root=tmp_path)
+

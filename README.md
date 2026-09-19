@@ -12,8 +12,8 @@ place — packaging, configs, the license-gated model registry, naive and season
 floors, classical ETS/ARIMA, the XGBoost lag-feature baseline, the electricity-demand
 data layer with frozen leakage-audited splits, metrics, rolling-origin backtest,
 results schema, paired statistics, and CI. `make smoke` runs end-to-end on the
-committed fixture with a test-stub forecaster; the GPU tier lands in a parallel slice.
-
+committed fixture through the real `naive` baseline; the GPU tier lands in a
+parallel slice.
 ## Quickstart
 
 The `models` extra installs the local model tier's runtime deps (`xgboost`,

@@ -173,16 +173,14 @@ def wilcoxon_signed_rank(
     negative = ranks[nonzero < 0].sum()
     statistic = min(positive, negative)
     n = int(nonzero.size)
+    if alternative not in {"two-sided", "less", "greater"}:
+        raise StatsError(f"unknown alternative {alternative!r}")
     if n <= 25:
-        p_value = _exact_two_sided_p(statistic, n, ranks)
+        p_value = _exact_p(positive, negative, n, ranks, alternative)
         method = "exact"
     else:
-        p_value = _normal_approx_p(statistic, n, ranks)
+        p_value = _normal_approx_p(positive, negative, ranks, alternative)
         method = "normal-approximation"
-    if alternative == "less":
-        p_value = p_value / 2.0 if positive <= negative else 1.0 - p_value / 2.0
-    elif alternative == "greater":
-        p_value = p_value / 2.0 if positive >= negative else 1.0 - p_value / 2.0
     return PairedResult(
         model_a=model_a,
         model_b=model_b,
@@ -195,13 +193,20 @@ def wilcoxon_signed_rank(
     )
 
 
-def _exact_two_sided_p(statistic: float, n: int, ranks: np.ndarray) -> float:
+def _exact_p(
+    positive: float,
+    negative: float,
+    n: int,
+    ranks: np.ndarray,
+    alternative: str,
+) -> float:
     """Exact null distribution by enumerating all sign assignments.
 
-    The rank sum under all ``2**n`` sign flips is enumerated directly; at
-    ``n <= 25`` that is at most ~33M and in practice the tests use small n. For
-    efficiency the distribution is built by convolving each rank's +rank/0
-    outcome, which is polynomial in the number of distinct rank sums.
+    For ``n <= 25`` enumerating all ``2**n`` sign flips is at most ~33M; the
+    distribution is built by convolving each rank's +rank/0 outcome, which is
+    polynomial in the number of distinct rank sums. The two-sided test uses the
+    exact distribution of ``min(W+, W-)``; one-sided tests take the requested
+    tail of ``W+``, the positive rank sum.
     """
     total = float(ranks.sum())
     reachable: dict[float, int] = {0.0: 1}
@@ -212,22 +217,40 @@ def _exact_two_sided_p(statistic: float, n: int, ranks: np.ndarray) -> float:
             updated[value + rank] = updated.get(value + rank, 0) + count
         reachable = updated
     denominator = 2 ** n
-    observed_min = min(statistic, total - statistic)
-    extreme = sum(
-        count
-        for value, count in reachable.items()
-        if min(value, total - value) <= observed_min + 1e-9
-    )
+    if alternative == "less":
+        extreme = sum(
+            count for value, count in reachable.items() if value <= positive + 1e-9
+        )
+    elif alternative == "greater":
+        extreme = sum(
+            count for value, count in reachable.items() if value >= positive - 1e-9
+        )
+    else:
+        observed_min = min(positive, negative)
+        extreme = sum(
+            count
+            for value, count in reachable.items()
+            if min(value, total - value) <= observed_min + 1e-9
+        )
     return extreme / denominator
 
 
-def _normal_approx_p(statistic: float, n: int, ranks: np.ndarray) -> float:
+def _normal_approx_p(
+    positive: float,
+    negative: float,
+    ranks: np.ndarray,
+    alternative: str,
+) -> float:
     mean = float(ranks.sum()) / 2.0
     variance = float(np.sum(ranks**2)) / 4.0
     if variance <= 0:
         return 1.0
-    z = (statistic - mean + 0.5) / math.sqrt(variance)
-    return 2.0 * _normal_cdf(z)
+    sd = math.sqrt(variance)
+    if alternative == "less":
+        return _normal_cdf((positive - mean + 0.5) / sd)
+    if alternative == "greater":
+        return 1.0 - _normal_cdf((positive - mean - 0.5) / sd)
+    return 2.0 * _normal_cdf((min(positive, negative) - mean + 0.5) / sd)
 
 
 def worst_case_rank_sum(n: int) -> float:
