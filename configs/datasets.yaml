@@ -1,0 +1,65 @@
+# Dataset catalogue for tsfm-benchmark.
+#
+# This file is the single source of truth for dataset provenance: where each
+# dataset comes from, its license, and the checksum that pins the exact bytes
+# a frozen split was audited against. No download happens implicitly; run
+# `python -m tsbench.data.build_catalog --materialize` (network required) to
+# fetch and verify, or `--record <dataset>` to print per-series digests.
+#
+# A dataset or split is PRELIMINARY until it has been materialised and its
+# manifest records the real file hash. Preliminary datasets are never used to
+# produce results.
+
+version: 1
+
+# The primary real dataset for E1-E8. Monash's Electricity Hourly collection
+# aggregates the UCI ElectricityLoadDiagrams20112014 smart-meter data
+# (370 clients, 15-minute readings, 2011-2014) to 321 hourly series spanning
+# 2012-2014. Choosing the Monash packaging keeps our splits comparable to the
+# published benchmark and to the Hugging Face mirror of the same collection.
+default_dataset: electricity_hourly
+
+datasets:
+  electricity_hourly:
+    loader: monash_tsf
+    description: >-
+      Electricity consumption of 321 client aggregates, hourly, 2012-2014,
+      from the Monash Time Series Forecasting Repository.
+    url: https://zenodo.org/records/4656140/files/electricity_hourly_dataset.zip?download=1
+    license: CC-BY-4.0
+    license_url: https://creativecommons.org/licenses/by/4.0/
+    license_verified: true
+    license_note: >-
+      Zenodo record 4656140 declares CC-BY-4.0. The upstream UCI source
+      (ElectricityLoadDiagrams20112014) is also CC-BY-4.0.
+    archive_filename: electricity_hourly_dataset.zip
+    member_filename: electricity_hourly_dataset.tsf
+    download_dir: data/electricity_hourly
+    # Zenodo-published md5 for the archive; re-verified against the live file.
+    md5: 18096614662b02640d265ad2a6a416bd
+    # sha256 pinned after the first verified download (see PROVENANCE.md).
+    sha256: eff447075dde68dca0105ab7e2851c5637967ae3bb21556fd8b931f196d5968c
+    member_sha256: bc33039133b9f1ca2e73d6b58d97306dd063f865fd12fbb0920ab312f047ad28
+    format: monash_tsf
+    frequency: hourly
+    series_count: 321
+    series_length: 26304
+    split_manifest: data/manifests/electricity_hourly_split_manifest.json
+    preliminary: false
+    notes: >-
+      Primary dataset. 24 evenly-spaced series (T1..T321) form the benchmark
+      subset; the split manifest freezes per-series length, boundary hashes,
+      and backtest geometry.
+
+  smoke:
+    loader: local_csv
+    description: Tiny committed fixture for the end-to-end smoke path.
+    path: tests/fixtures/smoke_series.csv
+    license: Apache-2.0
+    license_url: https://www.apache.org/licenses/LICENSE-2.0
+    license_verified: true
+    series_id: smoke_series
+    format: csv
+    frequency: daily
+    preliminary: false
+    notes: Owned by the foundation slice; the data layer only consumes the format.
