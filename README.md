@@ -9,10 +9,12 @@ accuracy-vs-cost Pareto frontier rather than a single leaderboard row.
 
 **Status:** P0 foundation in place — packaging, configs, model registry with license
 gate, CI, and the smoke wiring. The local model tier landed: naive and seasonal-naive
-floors, classical ETS/ARIMA, and the XGBoost lag-feature baseline. The data/evaluation
-spine and the GPU tier land in parallel slices. `make smoke` becomes executable
-end-to-end once the data/evaluation slice is merged; on this branch it fails with an
-explicit `error: cannot execute experiments` message.
+floors, classical ETS/ARIMA, and the XGBoost lag-feature baseline. The GPU tier landed:
+seeded LSTM and small Transformer forecasters plus zero-shot TimesFM 2.5 / Chronos-Bolt
+wrappers behind the weight-download gate; heavy deps import lazily and runs go through
+the compute handoff in `docs/colab-handoff.md`. The data/evaluation spine lands in a
+parallel slice. `make smoke` becomes executable end-to-end once that slice is merged;
+on this branch it fails with an explicit `error: cannot execute experiments` message.
 
 ## Quickstart
 
