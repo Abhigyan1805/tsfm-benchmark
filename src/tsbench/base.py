@@ -59,6 +59,7 @@ RESULT_COLUMNS: tuple[str, ...] = (
     "smape",
     "latency_ms",
     "peak_mem_mb",
+    "train_seconds",
     "params",
     "zero_shot",
     "git_sha",

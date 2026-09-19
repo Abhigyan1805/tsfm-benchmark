@@ -118,6 +118,7 @@ def test_result_columns_are_frozen() -> None:
         "smape",
         "latency_ms",
         "peak_mem_mb",
+        "train_seconds",
         "params",
         "zero_shot",
         "git_sha",
@@ -204,6 +205,15 @@ def test_non_boolean_zero_shot_is_refused(tmp_path: Path) -> None:
     entry = _entry("some.module:Model", zero_shot="yes")
     with pytest.raises(ModelConfigError, match="zero_shot"):
         load_registry(_write_config(tmp_path, {"m": entry}))
+
+
+def test_no_public_ungated_resolver(tmp_path: Path, fake_module: str) -> None:
+    registry = load_registry(
+        _write_config(tmp_path, {"nc": _entry(f"{fake_module}:Good", license="CC-BY-NC-4.0")})
+    )
+    assert not hasattr(registry, "entrypoint")
+    with pytest.raises(LicenseError, match="CC-BY-NC-4.0"):
+        registry.instantiate("nc")
 
 
 def test_instantiate_resolves_entrypoint_into_forecaster(

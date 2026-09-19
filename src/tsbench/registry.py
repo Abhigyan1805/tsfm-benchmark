@@ -246,7 +246,7 @@ class ModelRegistry:
                 f"unknown model {name!r}; available: {', '.join(sorted(self._specs))}"
             ) from exc
 
-    def entrypoint(self, name: str) -> Any:
+    def _resolve(self, name: str) -> Any:
         return _import_entrypoint(self.spec(name))
 
     def instantiate(

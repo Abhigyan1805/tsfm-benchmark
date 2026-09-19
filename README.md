@@ -52,11 +52,15 @@ evaluation slices build against:
 - `ModelInfo(name, family, zero_shot, params, license, revision, extra)` — `extra`
   optionally carries engine/backend details; `zero_shot` marks forecasters with no
   learned parameters (reference floors and untuned TSFMs)
-- `RESULT_COLUMNS` — every result row carries those columns in that exact order
+- `RESULT_COLUMNS` — every result row carries those columns in that exact order.
+  `train_seconds` sits immediately after `peak_mem_mb`; it is populated for trained
+  families and left empty for zero-shot and statistical models
+  (`zero_shot: true` and the classical/ML families).
 
 The experiment runner is resolved from `tsbench.evaluation.runner.run_experiment`
 and called with the experiment config path. The registry is
-`tsbench.registry.load_registry`.
+`tsbench.registry.load_registry`; `ModelRegistry.instantiate` is the only public
+construction path and every call passes the license gate.
 
 ## Models and the license gate
 
