@@ -133,7 +133,11 @@ def record_series(datasets_config: str | Path, name: str, *, root: str | Path = 
 
 
 def materialize(config: str | Path, *, root: str | Path = ".") -> dict:
-    """Download and verify every catalogue dataset, then digest its series."""
+    """Download and verify every catalogue dataset, reporting per-dataset status.
+
+    Each entry records the local path and file sha256, or is marked
+    ``preliminary`` when the fetch was not possible.
+    """
     specs, metadata = load_catalog(config)
     out: dict[str, object] = {"version": metadata.get("version"), "datasets": {}}
     for name, spec in specs.items():

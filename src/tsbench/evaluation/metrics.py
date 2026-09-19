@@ -117,10 +117,10 @@ def mase(
 
     The denominator is, in priority order: an explicit ``scale`` argument, the
     in-sample seasonal scale of ``y_train`` when supplied, or the in-sample
-    scale of ``y_true``. An all-zero or empty denominator yields ``nan`` when
-    the numerator is also zero (very common for the zero series) and ``0.0``
-    when the forecast is exact; otherwise the raw scaled error is returned,
-    which is well-defined and large.
+    scale of ``y_true``. An undefined denominator (fewer than
+    ``season_length + 1`` observations) returns ``nan``. A zero denominator
+    returns ``0.0`` for an exact forecast and ``inf`` otherwise; a finite
+    non-zero denominator divides the MAE.
     """
     actual, forecast = _as_pair(y_true, y_pred)
     if scale is None:

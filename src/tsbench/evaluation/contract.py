@@ -30,9 +30,9 @@ __all__ = [
 
 _CONTRACT_MODULE = "tsbench.base"
 
-# The schema is pinned here literally so this module works even before the
-# foundation slice lands. The leakage/backtest tests assert this tuple equals
-# what ``tsbench.base`` advertises, so drift is caught the moment both exist.
+# The schema is pinned here literally so this module works when the foundation
+# contract is unavailable. When ``tsbench.base`` is importable its columns are
+# used directly, so the fallback only matters off the foundation branch.
 _FALLBACK_RESULT_COLUMNS: tuple[str, ...] = (
     "run_id",
     "dataset",

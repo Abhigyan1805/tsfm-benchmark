@@ -78,9 +78,10 @@ Each entry must declare `entrypoint`, `family`, `zero_shot`, `license`, and
 Instantiation is refused for any license outside the explicit permissive allowlist
 (Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Unlicense, CC0-1.0,
 CC-BY-4.0) unless `TSBENCH_ALLOW_NONCOMMERCIAL=1` (or `run --allow-noncommercial`)
-is set. `TBD-at-download` marks a revision pinned at fetch time; pinned revisions
-are recorded with every result row. TimesFM 2.5 (Apache-2.0) is in scope; TimesFM
-3.0 weights are non-commercial and deliberately out of scope.
+is set. `TBD-at-download` marks a revision pinned at fetch time; `make licenses`
+prints the manifest revision for every key. The results schema does not carry a
+revision column. TimesFM 2.5 (Apache-2.0) is in scope; TimesFM 3.0 weights are
+non-commercial and deliberately out of scope.
 
 ## Environment variables
 
