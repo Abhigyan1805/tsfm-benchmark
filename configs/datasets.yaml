@@ -61,5 +61,6 @@ datasets:
     series_id: smoke_series
     format: csv
     frequency: daily
+    split_manifest: tests/fixtures/smoke_split_manifest.json
     preliminary: false
     notes: Owned by the foundation slice; the data layer only consumes the format.

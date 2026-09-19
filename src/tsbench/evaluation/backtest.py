@@ -61,6 +61,8 @@ class WindowForecast:
     latency_ms: float
     peak_mem_mb: float | None
     train_seconds: float | None
+    params: int | float | str | None = None
+    zero_shot: bool | None = None
     error: str | None = None
 
     @property
@@ -127,6 +129,7 @@ def backtest_windows(
         assert_no_future_data(plan, origin, plan.config.context_length, plan.config.horizon)
         start_memory()
         model = model_builder()
+        params, zero_shot = _model_metadata(model)
         context_values = np.array(context, dtype=np.float64, copy=True)
         target_values = np.array(target, dtype=np.float64, copy=True)
         train_seconds: float | None = None
@@ -161,6 +164,8 @@ def backtest_windows(
                     latency_ms=latency_ms,
                     peak_mem_mb=None,
                     train_seconds=train_seconds,
+                    params=params,
+                    zero_shot=zero_shot,
                     error=f"{type(exc).__name__}: {exc}",
                 )
             )
@@ -187,6 +192,8 @@ def backtest_windows(
                 latency_ms=latency_ms,
                 peak_mem_mb=stop_memory(),
                 train_seconds=train_seconds,
+                params=params,
+                zero_shot=zero_shot,
             )
         )
         gc.collect()
@@ -224,6 +231,25 @@ def backtest_model(
         model_name=model_name,
         family=family,
     )
+
+
+def _model_metadata(model: Any) -> tuple[Any, bool | None]:
+    """Read ``params`` and ``zero_shot`` from a model's ``ModelInfo``.
+
+    A model that does not expose ``info`` (or whose ``info`` raises) reports
+    ``(None, None)`` rather than aborting the backtest; metadata is recorded, not
+    required.
+    """
+    info = getattr(model, "info", None)
+    if not callable(info):
+        return None, None
+    try:
+        resolved = info()
+    except Exception:
+        return None, None
+    params = getattr(resolved, "params", None)
+    zero_shot = getattr(resolved, "zero_shot", None)
+    return params, bool(zero_shot) if zero_shot is not None else None
 
 
 def _resolve_labels(

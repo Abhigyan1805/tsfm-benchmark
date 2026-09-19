@@ -334,12 +334,13 @@ def test_smoke_config_runs_the_local_csv_fixture() -> None:
     assert fixture.is_file()
     assert fixture.parent == (REPO_ROOT / "tests" / "fixtures").resolve()
     assert config["models"] == ["naive"]
-    assert config["context_length"] > 0
-    assert config["horizon"] > 0
+    split = config["split"]
+    assert split["context_length"] > 0
+    assert split["horizon"] > 0
 
     rows = list(csv.DictReader(fixture.open(encoding="utf-8")))
     assert list(rows[0]) == ["timestamp", "value"]
-    assert len(rows) >= config["context_length"] + config["horizon"]
+    assert len(rows) >= split["context_length"] + split["horizon"]
     values = [float(row["value"]) for row in rows]
     assert all(value != 0.0 for value in values)
     stamps = [dt.date.fromisoformat(row["timestamp"]) for row in rows]

@@ -19,6 +19,7 @@ branch where the foundation and model slices have not landed yet.
 from __future__ import annotations
 
 import importlib
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,6 +55,8 @@ __all__ = [
 ]
 
 DEFAULT_RESULTS_DIR = Path("results")
+RESULTS_DIR_ENV = "TSBENCH_RESULTS_DIR"
+ZERO_SHOT_FAMILY = "tsfm"
 UNTRAINED_FAMILIES = frozenset({"baseline", "tsfm"})
 
 
@@ -89,7 +92,8 @@ class ExperimentConfig:
         if not isinstance(models, Sequence) or isinstance(models, (str, bytes)):
             raise RunnerError(f"{source}: 'models' must be a list")
         split = SplitConfig.from_mapping(raw.get("split"))
-        output_dir = Path(raw.get("output_dir") or DEFAULT_RESULTS_DIR)
+        override = os.environ.get(RESULTS_DIR_ENV)
+        output_dir = Path(override or raw.get("output_dir") or DEFAULT_RESULTS_DIR)
         manifest = raw.get("split_manifest") or dataset.get("split_manifest")
         return cls(
             name=name,
@@ -247,8 +251,8 @@ def _rows_for_model(
                 smape=outcome.metrics.get("smape", float("nan")),
                 latency_ms=outcome.latency_ms,
                 peak_mem_mb=outcome.peak_mem_mb,
-                params=_model_params(outcome.model, window_offset),
-                zero_shot=None,
+                params=outcome.params,
+                zero_shot=_row_zero_shot(outcome),
                 train_seconds=outcome.train_seconds,
                 git_sha=context.git_sha,
                 config_hash=context.config_sha,
@@ -258,8 +262,16 @@ def _rows_for_model(
     return rows
 
 
-def _model_params(model: str, window_offset: int) -> int | float | str | None:
-    return None
+def _row_zero_shot(outcome: WindowForecast) -> bool | None:
+    """Map a model's ``zero_shot`` flag onto the results schema.
+
+    The schema records zero-shot as a property of the pretrained TSFM family
+    only; untrained baselines report ``False`` even when their ``ModelInfo``
+    flags them as zero-shot, and a missing flag stays empty.
+    """
+    if outcome.zero_shot is None:
+        return None
+    return bool(outcome.zero_shot) and outcome.family == ZERO_SHOT_FAMILY
 
 
 def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[str, Any]:

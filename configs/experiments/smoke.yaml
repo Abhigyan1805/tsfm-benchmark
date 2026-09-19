@@ -2,14 +2,24 @@ name: smoke
 stage: smoke
 description: End-to-end smoke run on a tiny committed fixture; no downloads and no GPU.
 dataset:
+  name: smoke
   loader: local_csv
   path: tests/fixtures/smoke_series.csv
   series_id: smoke_series
   timestamp_column: timestamp
   value_column: value
+  split_manifest: tests/fixtures/smoke_split_manifest.json
 models:
   - naive
-context_length: 48
-horizon: 12
-stride: 12
+model_configs:
+  naive:
+    entrypoint: tests._stub_models:NaiveStub
+split:
+  train_frac: 0.6
+  val_frac: 0.2
+  test_frac: 0.2
+  context_length: 20
+  horizon: 4
+  stride: 4
+  min_train_size: 5
 output_dir: results
