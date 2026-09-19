@@ -139,6 +139,30 @@ def test_result_row_has_exactly_the_frozen_schema():
     validate_row(row)
 
 
+@pytest.mark.parametrize(
+    "model_name,family,zero_shot",
+    [
+        ("naive", "baseline", True),
+        ("seasonal_naive", "baseline", True),
+        ("auto_ets", "classical", False),
+        ("xgboost_lags", "ml", False),
+    ],
+)
+def test_zero_shot_column_preserves_the_models_own_flag(
+    model_name, family, zero_shot
+):
+    stub = type(
+        model_name,
+        (NaiveStub,),
+        {"name": model_name, "family": family, "zero_shot": zero_shot},
+    )
+    outcomes = backtest_windows(
+        _series(), _plan(), stub, series_id="s", model_name=model_name, family=family
+    )
+    assert outcomes
+    assert all(runner._row_zero_shot(outcome) is zero_shot for outcome in outcomes)
+
+
 def test_untrained_family_has_empty_train_seconds():
     row = result_row(
         run_id="r",
