@@ -11,14 +11,11 @@ both are resumable:
 Both routes execute the same job files through `scripts/colab_run.py`, so they
 share the content cache key, the result JSON shape, and the license gate.
 
-Tiers covered here:
-
-| Registry key | Class | Tier | Weights |
-|---|---|---|---|
-| `lstm` | `tsbench.models.deep.lstm:LSTMForecaster` | trained (seeded, fixed budget) | none |
-| `transformer` | `tsbench.models.deep.transformer:TransformerForecaster` | trained (seeded, fixed budget) | none |
-| `timesfm25` | `tsbench.models.tsfm.timesfm:TimesFM25` | zero-shot | `google/timesfm-2.5-200m-pytorch` (Apache-2.0, pinned) |
-| `chronos_bolt` | `tsbench.models.tsfm.chronos:ChronosBolt` | zero-shot | `amazon/chronos-bolt-base` (default, Apache-2.0, pinned; tiny/mini/small also verified) |
+Tiers covered here are the GPU-slice registry keys: trained, seeded, fixed-budget
+`lstm` and `transformer`, plus zero-shot `timesfm25` and `chronos_bolt`.
+`configs/models.yaml` is the single owner of each key's entrypoint, license,
+revision, and pinned `weights`; the verified TimesFM / Chronos-Bolt checkpoint
+tables live in `src/tsbench/models/tsfm/__init__.py`.
 
 ## Job files
 
