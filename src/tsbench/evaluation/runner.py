@@ -57,7 +57,6 @@ __all__ = [
 
 DEFAULT_RESULTS_DIR = Path("results")
 RESULTS_DIR_ENV = "TSBENCH_RESULTS_DIR"
-ZERO_SHOT_FAMILY = "tsfm"
 
 
 class RunnerError(RuntimeError):
@@ -297,15 +296,15 @@ def _rows_for_model(
 
 
 def _row_zero_shot(outcome: WindowForecast) -> bool | None:
-    """Map a model's ``zero_shot`` flag onto the results schema.
+    """Emit the model's own zero-shot flag, or empty when it is unreported.
 
-    The schema records zero-shot as a property of the pretrained TSFM family
-    only; untrained baselines report ``False`` even when their ``ModelInfo``
-    flags them as zero-shot, and a missing flag stays empty.
+    ``zero_shot`` marks forecasters with no learned parameters, so reference
+    floors and untuned TSFMs report ``True`` while classical, ML, and deep
+    families report ``False``.
     """
     if outcome.zero_shot is None:
         return None
-    return bool(outcome.zero_shot) and outcome.family == ZERO_SHOT_FAMILY
+    return bool(outcome.zero_shot)
 
 
 def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[str, Any]:
