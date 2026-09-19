@@ -466,3 +466,134 @@ def test_stats_run_on_a_real_backtest():
         naive, seasonal, model_a="naive", model_b="seasonal_naive"
     )
     assert result.median_difference > 0  # seasonal naive is better (lower MASE)
+
+
+def test_friedman_test_all_ties_returns_zero_statistic():
+    scores = {
+        "m1": {"s1": 1.0, "s2": 2.0},
+        "m2": {"s1": 1.0, "s2": 2.0},
+        "m3": {"s1": 1.0, "s2": 2.0},
+    }
+    result = stats.friedman_test(scores)
+    assert result.statistic == 0.0
+    assert result.p_value == 1.0
+    assert all(rank == pytest.approx(2.0) for rank in result.average_ranks.values())
+
+
+def test_measure_peak_memory_isolates_each_measurement():
+    from tsbench.evaluation.backtest import measure_peak_memory
+
+    start_window, stop_window = measure_peak_memory()
+    large = bytearray(8_000_000)
+    first = stop_window()
+    assert first is not None and first > 1.0
+    assert large  # keep the allocation alive across the first measurement
+
+    del large
+    import gc
+
+    gc.collect()
+    start_window()
+    small = bytearray(2_000)
+    second = stop_window()
+    assert second is not None
+    assert second < first
+    assert small
+
+
+def test_runner_rejects_split_fractions_that_disagree_with_manifest(tmp_path: Path):
+    import pandas as pd
+    import yaml
+
+    from tsbench.data import SplitConfig, build_manifest, save_manifest
+
+    values = np.arange(200, dtype=np.float64)
+
+    class _S:
+        series_id = "s"
+
+        def __init__(self, values):
+            self.values = values
+
+    stamps = pd.date_range("2024-01-01", periods=values.size, freq="D")
+    csv_path = tmp_path / "split_series.csv"
+    pd.DataFrame({"timestamp": stamps, "value": values}).to_csv(csv_path, index=False)
+    catalogue = {
+        "version": 1,
+        "default_dataset": "splitdata",
+        "datasets": {
+            "splitdata": {
+                "loader": "local_csv",
+                "path": str(csv_path),
+                "license": "Apache-2.0",
+                "series_id": "s",
+            }
+        },
+    }
+    catalogue_path = tmp_path / "datasets.yaml"
+    catalogue_path.write_text(yaml.safe_dump(catalogue), encoding="utf-8")
+
+    manifest_split = {
+        "train_frac": 0.6,
+        "val_frac": 0.2,
+        "test_frac": 0.2,
+        "context_length": 10,
+        "horizon": 4,
+        "stride": 4,
+        "min_train_size": 5,
+    }
+    manifest = build_manifest(
+        "splitdata", [_S(values)], SplitConfig.from_mapping(manifest_split)
+    )
+    manifest_path = tmp_path / "split_manifest.json"
+    save_manifest(manifest, manifest_path)
+
+    config = {
+        "name": "splitdata",
+        "dataset": {"name": "splitdata", "loader": "local_csv"},
+        "split_manifest": str(manifest_path),
+        "models": ["naive"],
+        "split": {**manifest_split, "train_frac": 0.5, "val_frac": 0.25, "test_frac": 0.25},
+        "datasets_config": str(catalogue_path),
+    }
+    config_path = tmp_path / "splitdata.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    repo_root = Path(__file__).resolve().parents[1]
+    with pytest.raises(runner.RunnerError, match="frozen manifest"):
+        runner.run_experiment(config_path, root=repo_root)
+
+
+def test_entrypoint_override_cannot_bypass_the_license_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import yaml
+
+    from tsbench.registry import LicenseError, load_registry
+
+    models_path = tmp_path / "models.yaml"
+    models_path.write_text(
+        yaml.safe_dump(
+            {
+                "models": {
+                    "gated": {
+                        "entrypoint": "tests._stub_models:NaiveStub",
+                        "family": "baseline",
+                        "zero_shot": True,
+                        "license": "CC-BY-NC-4.0",
+                        "revision": "test-pin",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = load_registry(models_path)
+    monkeypatch.setattr(runner, "_try_registry", lambda: registry)
+    monkeypatch.delenv("TSBENCH_ALLOW_NONCOMMERCIAL", raising=False)
+    with pytest.raises(LicenseError):
+        runner._build_model(
+            "gated",
+            None,
+            model_cfg={"entrypoint": "tests._stub_models:NaiveStub"},
+            seed=None,
+        )

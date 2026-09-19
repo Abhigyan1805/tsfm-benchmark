@@ -152,30 +152,55 @@ def _load_series(
 
 
 def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: int | None) -> Any:
-    """Instantiate a model via the registry, else a stub entrypoint."""
+    """Instantiate a model, keeping the registry license gate in the path.
+
+    A config-declared ``entrypoint`` is honoured for stubs, but when the
+    registry knows the model its declared license must pass the gate before the
+    stub is built, so an override cannot smuggle a non-permissive model through.
+    The entrypoint fallback is reserved for models the registry does not know.
+    """
     kwargs = dict(model_cfg.get("kwargs") or {})
     if seed is not None and kwargs.get("seed") is None and model_cfg.get("seed", True):
         kwargs.setdefault("seed", seed)
     entrypoint = model_cfg.get("entrypoint")
-    if entrypoint:
-        module_name, _, attribute = str(entrypoint).partition(":")
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError as exc:
-            raise RunnerError(
-                f"model {name!r}: cannot import {module_name!r}: {exc}"
-            ) from exc
-        target = getattr(module, attribute, None)
-        if target is None:
-            raise RunnerError(f"model {name!r}: {entrypoint!r} has no {attribute!r}")
-        return target(**kwargs) if kwargs else target()
     registry = _try_registry()
     if registry is not None and name in registry:
+        if entrypoint:
+            _check_registry_license(registry, name)
+            return _construct_entrypoint(name, entrypoint, kwargs)
         return registry.instantiate(name, **kwargs)
+    if entrypoint:
+        return _construct_entrypoint(name, entrypoint, kwargs)
     raise RunnerError(
         f"model {name!r}: no entrypoint in the experiment config and no registry "
         "entry available"
     )
+
+
+def _construct_entrypoint(name: str, entrypoint: Any, kwargs: Mapping[str, Any]) -> Any:
+    module_name, _, attribute = str(entrypoint).partition(":")
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as exc:
+        raise RunnerError(f"model {name!r}: cannot import {module_name!r}: {exc}") from exc
+    target = getattr(module, attribute, None)
+    if target is None:
+        raise RunnerError(f"model {name!r}: {entrypoint!r} has no {attribute!r}")
+    return target(**kwargs) if kwargs else target()
+
+
+def _check_registry_license(registry: Any, name: str) -> None:
+    """Run the registry's license gate for a model constructed by entrypoint."""
+    try:
+        module = importlib.import_module("tsbench.registry")
+    except ImportError as exc:
+        raise RunnerError(
+            f"model {name!r}: cannot import the license gate: {exc}"
+        ) from exc
+    check = getattr(module, "check_license", None)
+    if not callable(check):
+        raise RunnerError(f"model {name!r}: registry exposes no license gate")
+    check(registry.spec(name))
 
 
 def _try_registry() -> Any | None:
@@ -272,6 +297,22 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
         detail = "; ".join(problems[:5])
         raise RunnerError(f"{manifest_path}: split verification failed: {detail}")
 
+    requested_fracs = (
+        experiment.split.train_frac,
+        experiment.split.val_frac,
+        experiment.split.test_frac,
+    )
+    manifest_fracs = (
+        manifest.split.train_frac,
+        manifest.split.val_frac,
+        manifest.split.test_frac,
+    )
+    if requested_fracs != manifest_fracs:
+        raise RunnerError(
+            f"{config_path}: split fractions {requested_fracs} disagree with the "
+            f"frozen manifest {manifest_fracs}; the committed split is binding"
+        )
+
     frozen = {entry["series_id"]: entry for entry in manifest.series}
     ordered = [s for s in series if s.series_id in frozen]
     if not ordered:
@@ -323,6 +364,7 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
         "dataset": dataset_name,
         "git_sha": context.git_sha,
         "config_hash": context.config_sha,
+        "split_manifest": context.split_manifest,
     }
 
 
