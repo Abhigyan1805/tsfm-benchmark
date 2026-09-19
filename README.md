@@ -1,7 +1,97 @@
 # tsfm-benchmark
 
-When do time-series foundation models outperform conventional forecasting models, and what is the accuracy/latency trade-off?
+**Research question:** when do time-series foundation models (TSFMs) outperform conventional forecasting models, and what is the accuracy/latency trade-off?
 
-A reproducible, leakage-audited benchmark of classical, ML, deep, and foundation forecasters across forecasting horizons — measured on accuracy *and* inference cost.
+A reproducible, leakage-audited head-to-head of classical, ML, deep, and foundation
+forecasters across forecasting horizons — measured on accuracy *and* inference cost,
+with a partial reproduction of the TimesFM evaluation methodology, producing an
+accuracy-vs-cost Pareto frontier rather than a single leaderboard row.
 
-Status: bootstrapping. The full plan lands in `PLAN.md`; experiments land under `configs/experiments/` and results under `results/`.
+**Status:** P0 foundation in place — packaging, configs, model registry with license
+gate, CI, and the smoke wiring. Model implementations, the data/evaluation spine, and
+the GPU tier land in parallel slices. `make smoke` becomes executable end-to-end once
+the model and evaluation slices are merged; on this branch it fails with an explicit
+"evaluation slice unavailable" error.
+
+## Quickstart
+
+```sh
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+make test
+make lint
+```
+
+## Make targets
+
+| Target | What it does |
+| --- | --- |
+| `make test` | run the pytest suite |
+| `make lint` | run ruff |
+| `make smoke` | tiny end-to-end run: `python -m tsbench run --config configs/experiments/smoke.yaml` over `tests/fixtures/smoke_series.csv` through the `local_csv` loader |
+| `make data` | fetch/prepare datasets declared in `configs/datasets.yaml` |
+| `make backtest` | rolling-origin backtest (`configs/experiments/backtest.yaml`) |
+| `make deep` | LSTM / small Transformer run (`configs/experiments/deep.yaml`) |
+| `make tsfm` | TimesFM 2.5 / Chronos-Bolt zero-shot run (`configs/experiments/tsfm.yaml`) |
+| `make report` | aggregate results and regenerate figures |
+| `make licenses` | print the model license manifest from `configs/models.yaml` |
+| `make reproduce` | rerun the documented end-to-end path |
+
+Every stage is dispatched through `python -m tsbench run --config <experiment.yaml>`;
+configs for later phases land with their slices. CI runs the same commands the
+quickstart does: `ruff check .` and `python -m pytest`.
+
+## Frozen interfaces
+
+`src/tsbench/base.py` is the fleet-wide contract that the data, model, and
+evaluation slices build against:
+
+- `Forecaster` protocol — `.name`, `.fit(y) -> self`, `.predict(h) -> np.ndarray`,
+  `.info() -> ModelInfo`
+- `ModelInfo(name, family, zero_shot, params, license, revision, extra)` — `extra`
+  optionally carries engine/backend details; `zero_shot` marks forecasters with no
+  learned parameters (reference floors and untuned TSFMs)
+- `RESULT_COLUMNS` — every result row carries those columns in that exact order
+
+The experiment runner is resolved from `tsbench.evaluation.runner.run_experiment`
+and called with the experiment config path. The registry is
+`tsbench.registry.load_registry`.
+
+## Models and the license gate
+
+`configs/models.yaml` declares nine keys: `naive`, `seasonal_naive`, `auto_ets`,
+`auto_arima`, `xgboost_lags`, `lstm`, `transformer`, `timesfm25`, `chronos_bolt`.
+Each entry must declare `entrypoint`, `family`, `zero_shot`, `license`, and
+`revision`; an entry missing a license or revision is refused at load time.
+Instantiation is refused for any license outside the explicit permissive allowlist
+(Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Unlicense, CC0-1.0,
+CC-BY-4.0) unless `TSBENCH_ALLOW_NONCOMMERCIAL=1` (or `run --allow-noncommercial`)
+is set. `TBD-at-download` marks a revision pinned at fetch time; pinned revisions
+are recorded with every result row. TimesFM 2.5 (Apache-2.0) is in scope; TimesFM
+3.0 weights are non-commercial and deliberately out of scope.
+
+## Environment variables
+
+| Variable | Effect |
+| --- | --- |
+| `TSBENCH_ALLOW_NONCOMMERCIAL=1` | instantiate non-permissive or unknown-license models |
+| `TSBENCH_ALLOW_MODEL_DOWNLOAD=1` | permit TSFM weight downloads (GPU slice gate) |
+| `TSBENCH_RESULTS_DIR` | override the results root (default `results/`) |
+
+## Layout
+
+```
+configs/models.yaml            model keys, entrypoints, licenses, revisions
+configs/experiments/smoke.yaml smoke experiment
+src/tsbench/base.py            frozen contract: Forecaster, ModelInfo, RESULT_COLUMNS
+src/tsbench/registry.py        manifest validation + license-gated factory
+src/tsbench/cli.py             python -m tsbench run|licenses
+src/tsbench/data/              dataset loaders and splits (data slice)
+src/tsbench/models/            model implementations (model and GPU slices)
+src/tsbench/evaluation/        metrics, backtest, runner, report (data slice)
+tests/                         pytest suite and the smoke fixture
+```
+
+See `PLAN.md` for the condensed plan of record: scope, experiment matrix,
+phases, risks, and deliverables.
