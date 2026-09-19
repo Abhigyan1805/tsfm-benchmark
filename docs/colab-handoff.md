@@ -18,7 +18,7 @@ Tiers covered here:
 | `lstm` | `tsbench.models.deep.lstm:LSTMForecaster` | trained (seeded, fixed budget) | none |
 | `transformer` | `tsbench.models.deep.transformer:TransformerForecaster` | trained (seeded, fixed budget) | none |
 | `timesfm25` | `tsbench.models.tsfm.timesfm:TimesFM25` | zero-shot | `google/timesfm-2.5-200m-pytorch` (Apache-2.0, pinned) |
-| `chronos_bolt` | `tsbench.models.tsfm.chronos:ChronosBolt` | zero-shot | `amazon/chronos-bolt-{tiny,mini,small,base}` (Apache-2.0, pinned) |
+| `chronos_bolt` | `tsbench.models.tsfm.chronos:ChronosBolt` | zero-shot | `amazon/chronos-bolt-base` (default, Apache-2.0, pinned; tiny/mini/small also verified) |
 
 ## Job files
 
@@ -201,10 +201,15 @@ python scripts/kaggle_run.py run \
 ```sh
 # what the runner prints and invokes (shown here for transparency)
 kaggle kernels push -p results/kaggle/tsbench-gpu-<hash>
-kaggle kernels status <owner>/tsbench-gpu-<hash>     # polled to COMPLETE
+kaggle kernels status <owner>/tsbench-gpu-<hash>     # polled to a terminal state
 kaggle kernels output <owner>/tsbench-gpu-<hash> -p results/kaggle/tsbench-gpu-<hash>/output
 # then: ingest the fetched bundle into results/kaggle-01/<cache-key>.json
 ```
+
+`run` never discards a partial batch: if the kernel ends in an error state it still
+fetches and ingests whatever result JSON was written, reports the missing keys, and
+exits non-zero, so a failed job costs only its own measurement. A pending-job timeout
+aborts before fetching.
 
 The generated kernel is self-contained: it base64-embeds the pending jobs,
 clones `--repo` at `--ref` into `/tmp`, runs `scripts/colab_run.py run` against
