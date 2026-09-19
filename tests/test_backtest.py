@@ -597,3 +597,80 @@ def test_entrypoint_override_cannot_bypass_the_license_gate(
             model_cfg={"entrypoint": "tests._stub_models:NaiveStub"},
             seed=None,
         )
+
+
+def test_registry_entrypoint_wins_over_a_config_override_when_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import yaml
+
+    from tsbench.registry import load_registry
+
+    models_path = tmp_path / "models.yaml"
+    models_path.write_text(
+        yaml.safe_dump(
+            {
+                "models": {
+                    "naive": {
+                        "entrypoint": "tests._stub_models:NaiveStub",
+                        "family": "baseline",
+                        "zero_shot": True,
+                        "license": "Apache-2.0",
+                        "revision": "test-pin",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = load_registry(models_path)
+    monkeypatch.setattr(runner, "_try_registry", lambda: registry)
+
+    model = runner._build_model(
+        "naive",
+        None,
+        model_cfg={
+            "entrypoint": "tests._stub_models:ConstantForecaster",
+            "kwargs": {"value": 5.0},
+        },
+        seed=None,
+    )
+    assert isinstance(model, NaiveStub)
+    model.fit(np.array([1.0, 2.0, 3.0]))
+    assert np.allclose(model.predict(2), [3.0, 3.0])
+
+
+def test_config_entrypoint_is_used_when_the_registry_entrypoint_is_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import yaml
+
+    from tsbench.registry import load_registry
+
+    models_path = tmp_path / "models.yaml"
+    models_path.write_text(
+        yaml.safe_dump(
+            {
+                "models": {
+                    "naive": {
+                        "entrypoint": "tsbench.models.not_landed:Naive",
+                        "family": "baseline",
+                        "zero_shot": True,
+                        "license": "Apache-2.0",
+                        "revision": "test-pin",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    registry = load_registry(models_path)
+    monkeypatch.setattr(runner, "_try_registry", lambda: registry)
+
+    model = runner._build_model(
+        "naive",
+        None,
+        model_cfg={"entrypoint": "tests._stub_models:NaiveStub"},
+        seed=None,
+    )
+    assert isinstance(model, NaiveStub)

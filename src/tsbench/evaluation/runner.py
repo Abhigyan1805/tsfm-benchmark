@@ -152,12 +152,14 @@ def _load_series(
 
 
 def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: int | None) -> Any:
-    """Instantiate a model, keeping the registry license gate in the path.
+    """Instantiate a model, routing registry-known names through the license gate.
 
-    A config-declared ``entrypoint`` is honoured for stubs, but when the
-    registry knows the model its declared license must pass the gate before the
-    stub is built, so an override cannot smuggle a non-permissive model through.
-    The entrypoint fallback is reserved for models the registry does not know.
+    Construction always goes through ``ModelRegistry.instantiate`` when the
+    registry resolves ``name``, so the license gate runs against the entrypoint
+    actually built. A config-declared ``entrypoint`` is a stub fallback for
+    branches where the registered module has not landed yet, so it is used only
+    when the registry's own entrypoint cannot be imported. Models the registry
+    does not know may declare their own entrypoint.
     """
     kwargs = dict(model_cfg.get("kwargs") or {})
     if seed is not None and kwargs.get("seed") is None and model_cfg.get("seed", True):
@@ -165,10 +167,17 @@ def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: in
     entrypoint = model_cfg.get("entrypoint")
     registry = _try_registry()
     if registry is not None and name in registry:
-        if entrypoint:
-            _check_registry_license(registry, name)
-            return _construct_entrypoint(name, entrypoint, kwargs)
-        return registry.instantiate(name, **kwargs)
+        import_error = _model_import_error()
+        if import_error is not None:
+            try:
+                return registry.instantiate(name, **kwargs)
+            except import_error as exc:
+                if not entrypoint:
+                    raise RunnerError(
+                        f"model {name!r}: registry entrypoint is unavailable: {exc}"
+                    ) from exc
+        else:
+            return registry.instantiate(name, **kwargs)
     if entrypoint:
         return _construct_entrypoint(name, entrypoint, kwargs)
     raise RunnerError(
@@ -189,18 +198,14 @@ def _construct_entrypoint(name: str, entrypoint: Any, kwargs: Mapping[str, Any])
     return target(**kwargs) if kwargs else target()
 
 
-def _check_registry_license(registry: Any, name: str) -> None:
-    """Run the registry's license gate for a model constructed by entrypoint."""
+def _model_import_error() -> type[BaseException] | None:
+    """The registry's ``ModelImportError``, or ``None`` if it is unavailable."""
     try:
         module = importlib.import_module("tsbench.registry")
-    except ImportError as exc:
-        raise RunnerError(
-            f"model {name!r}: cannot import the license gate: {exc}"
-        ) from exc
-    check = getattr(module, "check_license", None)
-    if not callable(check):
-        raise RunnerError(f"model {name!r}: registry exposes no license gate")
-    check(registry.spec(name))
+    except ImportError:
+        return None
+    error = getattr(module, "ModelImportError", None)
+    return error if isinstance(error, type) and issubclass(error, BaseException) else None
 
 
 def _try_registry() -> Any | None:
