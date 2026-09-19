@@ -35,7 +35,7 @@ from ..data.catalog import (
     load_catalog,
     resolve_member_path,
 )
-from ..data.loaders import load_local_csv, load_monash_tsf
+from ..data.loaders import DataError, load_local_csv, load_monash_tsf
 from ..data.splits import (
     SplitConfig,
     SplitError,
@@ -58,7 +58,6 @@ __all__ = [
 DEFAULT_RESULTS_DIR = Path("results")
 RESULTS_DIR_ENV = "TSBENCH_RESULTS_DIR"
 ZERO_SHOT_FAMILY = "tsfm"
-UNTRAINED_FAMILIES = frozenset({"baseline", "tsfm"})
 
 
 class RunnerError(RuntimeError):
@@ -310,57 +309,60 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
     """Execute an experiment config and return a run summary."""
     experiment = load_experiment(config_path)
     base = Path(root)
-    specs, _catalog_meta = load_catalog(base / experiment.datasets_config)
-    dataset_cfg = dict(experiment.dataset)
-    dataset_name = str(dataset_cfg.get("name") or "")
-    if not dataset_name:
-        if len(specs) == 1:
-            dataset_name = next(iter(specs))
-        else:
+    try:
+        specs, _catalog_meta = load_catalog(base / experiment.datasets_config)
+        dataset_cfg = dict(experiment.dataset)
+        dataset_name = str(dataset_cfg.get("name") or "")
+        if not dataset_name:
+            if len(specs) == 1:
+                dataset_name = next(iter(specs))
+            else:
+                raise RunnerError(
+                    f"{config_path}: dataset.name is required when the catalogue has "
+                    f"multiple datasets ({', '.join(specs)})"
+                )
+        if dataset_name not in specs:
+            raise RunnerError(f"{config_path}: unknown dataset {dataset_name!r}")
+        spec = specs[dataset_name]
+
+        series = _load_series(spec, dataset_cfg, root=base)
+
+        manifest_path = experiment.split_manifest or (
+            Path(spec.split_manifest) if spec.split_manifest else None
+        )
+        if manifest_path is None:
             raise RunnerError(
-                f"{config_path}: dataset.name is required when the catalogue has "
-                f"multiple datasets ({', '.join(specs)})"
+                f"{config_path}: no split manifest; set dataset.split_manifest or "
+                "split_manifest"
             )
-    if dataset_name not in specs:
-        raise RunnerError(f"{config_path}: unknown dataset {dataset_name!r}")
-    spec = specs[dataset_name]
+        manifest = load_manifest(manifest_path)
+        if manifest.preliminary:
+            raise RunnerError(
+                f"{manifest_path}: split manifest is marked PRELIMINARY; refusing to "
+                "produce results from an unfrozen split"
+            )
+        problems = verify_manifest(manifest, {s.series_id: s for s in series})
+        if problems:
+            detail = "; ".join(problems[:5])
+            raise RunnerError(f"{manifest_path}: split verification failed: {detail}")
 
-    series = _load_series(spec, dataset_cfg, root=base)
-
-    manifest_path = experiment.split_manifest or (
-        Path(spec.split_manifest) if spec.split_manifest else None
-    )
-    if manifest_path is None:
-        raise RunnerError(
-            f"{config_path}: no split manifest; set dataset.split_manifest or "
-            "split_manifest"
+        requested_fracs = (
+            experiment.split.train_frac,
+            experiment.split.val_frac,
+            experiment.split.test_frac,
         )
-    manifest = load_manifest(manifest_path)
-    if manifest.preliminary:
-        raise RunnerError(
-            f"{manifest_path}: split manifest is marked PRELIMINARY; refusing to "
-            "produce results from an unfrozen split"
+        manifest_fracs = (
+            manifest.split.train_frac,
+            manifest.split.val_frac,
+            manifest.split.test_frac,
         )
-    problems = verify_manifest(manifest, {s.series_id: s for s in series})
-    if problems:
-        detail = "; ".join(problems[:5])
-        raise RunnerError(f"{manifest_path}: split verification failed: {detail}")
-
-    requested_fracs = (
-        experiment.split.train_frac,
-        experiment.split.val_frac,
-        experiment.split.test_frac,
-    )
-    manifest_fracs = (
-        manifest.split.train_frac,
-        manifest.split.val_frac,
-        manifest.split.test_frac,
-    )
-    if requested_fracs != manifest_fracs:
-        raise RunnerError(
-            f"{config_path}: split fractions {requested_fracs} disagree with the "
-            f"frozen manifest {manifest_fracs}; the committed split is binding"
-        )
+        if requested_fracs != manifest_fracs:
+            raise RunnerError(
+                f"{config_path}: split fractions {requested_fracs} disagree with the "
+                f"frozen manifest {manifest_fracs}; the committed split is binding"
+            )
+    except (DataError, SplitError, FileNotFoundError) as exc:
+        raise RunnerError(str(exc)) from exc
 
     frozen = {entry["series_id"]: entry for entry in manifest.series}
     ordered = [s for s in series if s.series_id in frozen]

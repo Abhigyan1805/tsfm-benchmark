@@ -13,8 +13,8 @@ seasonal-naive floors, classical ETS/ARIMA, the XGBoost lag-feature baseline, se
 LSTM and small Transformer forecasters plus zero-shot TimesFM 2.5 / Chronos-Bolt
 wrappers behind the weight-download gate, the electricity-demand data layer with frozen
 leakage-audited splits, metrics, rolling-origin backtest, results schema, paired
-statistics, and CI. `make smoke` runs end-to-end on the committed fixture; GPU runs go
-through the compute handoff in `docs/colab-handoff.md`.
+statistics, and CI. `make smoke` runs end-to-end on the committed fixture through the
+real `naive` baseline; GPU runs go through the compute handoff in `docs/colab-handoff.md`.
 
 ## Quickstart
 
