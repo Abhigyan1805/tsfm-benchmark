@@ -8,12 +8,16 @@ with a partial reproduction of the TimesFM evaluation methodology, producing an
 accuracy-vs-cost Pareto frontier rather than a single leaderboard row.
 
 **Status:** P0 foundation in place — packaging, configs, model registry with license
-gate, CI, and the smoke wiring. Model implementations, the data/evaluation spine, and
-the GPU tier land in parallel slices. `make smoke` becomes executable end-to-end once
-the model and evaluation slices are merged; on this branch it fails with an explicit
-`error: cannot execute experiments` message.
+gate, CI, and the smoke wiring. The local model tier landed: naive and seasonal-naive
+floors, classical ETS/ARIMA, and the XGBoost lag-feature baseline. The data/evaluation
+spine and the GPU tier land in parallel slices. `make smoke` becomes executable
+end-to-end once the data/evaluation slice is merged; on this branch it fails with an
+explicit `error: cannot execute experiments` message.
 
 ## Quickstart
+
+The `models` extra installs the local model tier's runtime deps (`xgboost`,
+`scikit-learn`, `statsforecast`, `statsmodels`); without it the tier's tests skip.
 
 ```sh
 python -m venv .venv
