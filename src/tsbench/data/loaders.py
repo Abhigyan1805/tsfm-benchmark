@@ -22,10 +22,10 @@ import shutil
 import urllib.error
 import urllib.request
 import zipfile
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import numpy as np
 

@@ -3,9 +3,11 @@
 Two complementary tools live here:
 
 * :func:`assert_context_only_scaling` and :func:`assert_no_future_in_features`
-  raise :class:`LeakageError` when a statistic or feature was computed using
-  values from the target window. The tests deliberately feed them leaky
-  implementations to prove the detector fires, not just that clean code passes.
+  return a failed :class:`LeakageAudit` when a statistic or feature was computed
+  using values from the target window; :meth:`LeakageReport.require_ok` turns a
+  failed audit into a :class:`LeakageError`. The tests deliberately feed them
+  leaky implementations to prove the detector fires, not just that clean code
+  passes.
 * :class:`ContextScaler` is the reference scaler: it is fit on the context only
   and applied to both context and target, so a model can standardise inputs
   without ever touching future observations.
@@ -16,8 +18,9 @@ observation, making it possible to say *which* future index leaked.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
 
 import numpy as np
 

@@ -26,8 +26,8 @@ split:
   stride: 24
   min_train_size: 168
 
-# Models are declared by registry key; entrypoints come from configs/models.yaml
-# once the model slices land. `make smoke` uses the tiny fixture instead.
+# Models are declared by registry key; entrypoints come from configs/models.yaml.
+# `make smoke` uses the tiny fixture instead.
 models:
   - naive
   - seasonal_naive
