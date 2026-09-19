@@ -85,15 +85,13 @@ def smape(y_true: Any, y_pred: Any) -> float:
     return float(100.0 * np.mean(terms))
 
 
-def seasonal_naive_scale(y: Any, season_length: int = 1, *, in_sample: bool = True) -> float:
+def seasonal_naive_scale(y: Any, season_length: int = 1) -> float:
     """Mean absolute seasonal difference used as the MASE denominator.
 
-    With ``in_sample=True`` the scale is ``mean(|y_t - y_{t-m}|)`` over the
-    supplied series (the standard in-sample variant). With
-    ``in_sample=False`` the scale is computed from the first ``m`` values of the
-    *forecast-period* actuals, which is only valid when ``y`` is the actual
-    future block. Returns ``nan`` when fewer than ``season_length + 1`` finite
-    observations exist, and ``0.0`` for a perfectly seasonal-constant series.
+    The scale is ``mean(|y_t - y_{t-m}|)`` over the supplied series, the
+    standard in-sample seasonal-naive scale. Returns ``nan`` when fewer than
+    ``season_length + 1`` finite observations exist, and ``0.0`` for a
+    perfectly seasonal-constant series.
     """
     array = np.asarray(y, dtype=np.float64).reshape(-1)
     array = array[np.isfinite(array)]

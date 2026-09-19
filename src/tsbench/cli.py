@@ -78,6 +78,18 @@ def _load_runner() -> Any:
     return runner
 
 
+def _runner_error_type() -> type[BaseException] | None:
+    """The evaluation slice's ``RunnerError``, or ``None`` if unavailable."""
+    try:
+        module = importlib.import_module(EVALUATION_RUNNER[0])
+    except ImportError:
+        return None
+    error = getattr(module, "RunnerError", None)
+    if isinstance(error, type) and issubclass(error, BaseException):
+        return error
+    return None
+
+
 def _run(args: argparse.Namespace) -> int:
     config_path = Path(args.config)
     if not config_path.is_file():
@@ -89,7 +101,14 @@ def _run(args: argparse.Namespace) -> int:
         os.environ[RESULTS_DIR_ENV] = str(args.output)
     runner = _load_runner()
     print(f"running experiment config: {config_path}", file=sys.stderr)
-    result = runner(config_path)
+    try:
+        result = runner(config_path)
+    except Exception as exc:
+        runner_error = _runner_error_type()
+        if runner_error is None or not isinstance(exc, runner_error):
+            raise
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if result is not None:
         print(result)
     return 0

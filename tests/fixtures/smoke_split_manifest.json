@@ -1,0 +1,45 @@
+{
+  "dataset": "smoke",
+  "license": "Apache-2.0",
+  "loader": "local_csv",
+  "metadata": {},
+  "preliminary": false,
+  "series": [
+    {
+      "boundary": {
+        "test_end": {
+          "end": 120,
+          "n_values": 3,
+          "sha256": "a921d57082fb8fd95a4144fa680f0d807af8af876a820e9eb7433427cb6f3694"
+        },
+        "train_end": {
+          "end": 72,
+          "n_values": 3,
+          "sha256": "e9224743babe242c66b8c98b4d6161184ee5fa73acde3685b58c924821ef59b1"
+        },
+        "val_end": {
+          "end": 96,
+          "n_values": 3,
+          "sha256": "1c5d257c47a25d105c7b21e6ea42d1db24c6d8e62272b90d170c0b60416e594a"
+        }
+      },
+      "n_observations": 120,
+      "series_id": "smoke_series",
+      "test_end": 120,
+      "train_end": 72,
+      "val_end": 96,
+      "value_sha256": "84fb6ad78309dba67044f3032ac80f36d5fdcce4fd2c45c9eb09b9ba2ecb73bc"
+    }
+  ],
+  "source": "tests/fixtures/smoke_series.csv",
+  "split": {
+    "context_length": 20,
+    "horizon": 4,
+    "min_train_size": 5,
+    "stride": 4,
+    "test_frac": 0.2,
+    "train_frac": 0.6,
+    "val_frac": 0.2
+  },
+  "version": 1
+}
