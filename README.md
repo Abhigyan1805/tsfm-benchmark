@@ -18,7 +18,7 @@ the model and evaluation slices are merged; on this branch it fails with an expl
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,models]"
 make test
 make lint
 ```

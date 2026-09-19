@@ -11,7 +11,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 ## Commands
 
-- Setup: `pip install -e ".[dev]"`; then `make test`, `make lint`, `make smoke`, `make licenses`.
+- Setup: `pip install -e ".[dev,models]"`; then `make test`, `make lint`, `make smoke`, `make licenses`. The `models` extra installs the local model tier's runtime deps (`xgboost`, `scikit-learn`, `statsforecast`, `statsmodels`); without it the tier's tests skip.
 - Tests import `tsbench` without an install because pytest injects `src` via `pythonpath`; CI does a full editable install and runs ruff + pytest on 3.10 and 3.12.
 
 ## Maintaining this file
