@@ -1,0 +1,95 @@
+# GPU tier rolling-origin backtest on the primary electricity-demand dataset.
+#
+# The deep (LSTM, small Transformer) and zero-shot TSFM (TimesFM 2.5,
+# Chronos-Bolt) families run on the SAME frozen windows as the CPU families:
+# identical dataset, split fractions, context_length=168, stride=240, and the
+# committed split manifest. Every window's context ends at the forecast origin
+# and its horizon begins there, so no window reads a value at or after its
+# target block.
+#
+# BOUNDED SUBSET, as in backtest.yaml. All 24 frozen evaluation series are used
+# with origins sampled every 240 steps (10 days), yielding ~21 origins per
+# series per horizon. The frozen boundaries and leakage guarantees are
+# unchanged; the full-stride sweep is a follow-up.
+name: gpu
+stage: gpu
+description: >-
+  Deep + zero-shot TSFM rolling-origin backtest over the 24 electricity series
+  at the primary 24h horizon, on the CPU families' frozen windows.
+
+dataset:
+  name: electricity_hourly
+  loader: monash_tsf
+  max_series: null
+  split_manifest: data/manifests/electricity_hourly_split_manifest.json
+
+split:
+  train_frac: 0.6
+  val_frac: 0.2
+  test_frac: 0.2
+  context_length: 168
+  horizon: 24
+  stride: 240
+  min_train_size: 168
+
+# Bounded-subset provenance, recorded verbatim in run.json.
+subset:
+  series: all 24 frozen evaluation series (T1..T308, evenly spaced)
+  origin_stride: 240
+  origins_per_series_per_horizon: "21-22"
+  note: >-
+    GPU tier, same frozen windows as the CPU backtest. The full-stride
+    (24-step) sweep is a follow-up.
+
+# On a CUDA host `measure_peak_memory` records the GPU allocator's live peak
+# per window; the one-time checkpoint load is charged only to the window that
+# performed it. Without CUDA it falls back to host tracemalloc.
+track_memory: true
+
+# Prime each model's process caches (TSFM checkpoint load + TimesFM compile)
+# before the first scored window, so the one-time setup is not charged to a
+# single row's latency_ms and the cost percentiles stay clean.
+warmup: true
+
+# Registry keys; entrypoints come from configs/models.yaml. The deep budget and
+# seeds are fixed in `model_configs` below and the run seed is forwarded to the
+# seeded constructors. TSFM weights load zero-shot behind the license gate and
+# are cached process-wide so rolling origins do not reload the checkpoint.
+models:
+  - lstm
+  - transformer
+  - timesfm25
+  - chronos_bolt
+
+model_configs:
+  lstm:
+    kwargs:
+      context: 32
+      hidden: 32
+      layers: 1
+      epochs: 50
+      lr: 0.01
+      batch_size: 64
+  transformer:
+    kwargs:
+      context: 32
+      hidden: 32
+      layers: 2
+      heads: 4
+      feedforward: 64
+      max_horizon: 32
+      epochs: 50
+      lr: 0.01
+      batch_size: 64
+  timesfm25:
+    kwargs:
+      max_context: 512
+      max_horizon: 128
+  chronos_bolt:
+    kwargs:
+      max_context: 512
+
+# `season_length` is the metric scale (seasonal MASE denominator).
+season_length: 24
+seed: 20240919
+output_dir: results

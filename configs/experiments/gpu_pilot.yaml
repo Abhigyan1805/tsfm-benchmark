@@ -1,0 +1,67 @@
+# GPU timing pilot on the real electricity dataset: one forecast origin per
+# frozen series (stride larger than the test span) across all four GPU-tier
+# models. Run this before the full sweep to confirm the session, measure the
+# per-window cost, and extrapolate the full 24/48/96/192 runtime; a session
+# timeout can then never leave a horizon half-measured. The pilot's run
+# directory must land outside `results/` (pass --out results/kaggle-gpu-pilot)
+# so it is never merged into the committed summary.
+name: gpu_pilot
+stage: gpu
+description: >-
+  Real-data timing pilot: 24 frozen series x 1 origin x 4 GPU models at h24.
+
+dataset:
+  name: electricity_hourly
+  loader: monash_tsf
+  max_series: null
+  split_manifest: data/manifests/electricity_hourly_split_manifest.json
+
+split:
+  train_frac: 0.6
+  val_frac: 0.2
+  test_frac: 0.2
+  context_length: 168
+  horizon: 24
+  stride: 26304
+  min_train_size: 168
+
+track_memory: true
+warmup: true
+
+models:
+  - lstm
+  - transformer
+  - timesfm25
+  - chronos_bolt
+
+model_configs:
+  lstm:
+    kwargs:
+      context: 32
+      hidden: 32
+      layers: 1
+      epochs: 50
+      lr: 0.01
+      batch_size: 64
+  transformer:
+    kwargs:
+      context: 32
+      hidden: 32
+      layers: 2
+      heads: 4
+      feedforward: 64
+      max_horizon: 32
+      epochs: 50
+      lr: 0.01
+      batch_size: 64
+  timesfm25:
+    kwargs:
+      max_context: 512
+      max_horizon: 128
+  chronos_bolt:
+    kwargs:
+      max_context: 512
+
+season_length: 24
+seed: 20240919
+output_dir: results

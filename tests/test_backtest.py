@@ -588,6 +588,100 @@ def test_measure_peak_memory_isolates_each_measurement():
     assert small
 
 
+def test_measure_peak_memory_uses_the_cuda_allocator_when_available(monkeypatch):
+    from tsbench.evaluation import backtest as bt
+
+    class FakeCuda:
+        def __init__(self) -> None:
+            self.live = 0
+            self.peak = 0
+
+        def synchronize(self) -> None:
+            return None
+
+        def memory_allocated(self) -> int:
+            return self.live
+
+        def reset_peak_memory_stats(self) -> None:
+            self.peak = self.live
+
+        def max_memory_allocated(self) -> int:
+            return self.peak
+
+    class FakeTorch:
+        cuda = FakeCuda()
+
+    monkeypatch.setattr(bt, "_cuda_meter", lambda: FakeTorch)
+    start, stop = bt.measure_peak_memory()
+    FakeTorch.cuda.live = 0
+    FakeTorch.cuda.peak = 0
+    start()
+    FakeTorch.cuda.live = 2 * 1024 * 1024
+    FakeTorch.cuda.peak = FakeTorch.cuda.live
+    assert stop() == pytest.approx(2.0)
+
+    # A later window re-baselines on the live allocation.
+    start()
+    FakeTorch.cuda.live = 3 * 1024 * 1024
+    FakeTorch.cuda.peak = FakeTorch.cuda.live
+    assert stop() == pytest.approx(1.0)
+
+
+def test_backtest_reads_model_params_after_fit():
+    import dataclasses
+
+    class TrainedStub(NaiveStub):
+        name = "trained"
+        family = "deep"
+
+        def __init__(self) -> None:
+            super().__init__()
+            self._params = None
+
+        def fit(self, y):
+            self._params = 42
+            return super().fit(y)
+
+        def info(self):
+            base = super().info()
+            return dataclasses.replace(base, params=self._params)
+
+    outcomes = backtest_windows(
+        _series(),
+        _plan(),
+        TrainedStub,
+        series_id="s",
+        model_name="trained",
+        family="deep",
+    )
+    assert outcomes
+    assert all(outcome.params == 42 for outcome in outcomes)
+
+
+def test_backtest_warmup_primes_caches_without_adding_rows():
+    plan = _plan()
+    values = _series()
+    counter = {"built": 0}
+
+    def builder():
+        counter["built"] += 1
+        return NaiveStub()
+
+    outcomes = backtest_windows(
+        values,
+        plan,
+        builder,
+        series_id="s",
+        model_name="warm",
+        family="tsfm",
+        warmup=True,
+    )
+    expected = len(enumerate_windows(plan, period="test"))
+    assert len(outcomes) == expected
+    # One extra build for the discarded warm-up prediction.
+    assert counter["built"] == expected + 1
+
+
 def test_runner_rejects_split_fractions_that_disagree_with_manifest(tmp_path: Path):
     import pandas as pd
     import yaml

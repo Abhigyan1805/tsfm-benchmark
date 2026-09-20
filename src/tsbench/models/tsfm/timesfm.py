@@ -17,11 +17,25 @@ from tsbench.models.tsfm import (
     require_weights_allowed,
 )
 
-__all__ = ["TimesFM25"]
+__all__ = ["TimesFM25", "clear_backend_cache"]
 
 DEFAULT_MODEL_ID = "google/timesfm-2.5-200m-pytorch"
 _INPUT_PATCH = 32
 _OUTPUT_PATCH = 128
+
+# Process-level cache: the rolling-origin backtest builds a fresh model per
+# window, so without sharing, the 200M checkpoint would be loaded and compiled
+# hundreds of times. ``_BACKEND_CACHE`` holds ``(backend, module)`` per pinned
+# checkpoint; ``_COMPILED_HORIZON`` records the compiled target per checkpoint
+# and compile configuration so later instances skip recompilation.
+_BACKEND_CACHE: dict[tuple[str, str], tuple[Any, Any]] = {}
+_COMPILED_HORIZON: dict[tuple[str, str, int, bool], int] = {}
+
+
+def clear_backend_cache() -> None:
+    """Drop the process-level TimesFM backend/compile cache."""
+    _BACKEND_CACHE.clear()
+    _COMPILED_HORIZON.clear()
 
 
 class TimesFM25(Forecaster):
@@ -72,8 +86,16 @@ class TimesFM25(Forecaster):
         self._compiled_horizon: int | None = None
         self._context_values: list[float] | None = None
 
+    def _backend_key(self) -> tuple[str, str]:
+        return (self.model_id, self.revision)
+
     def _ensure_backend(self) -> Any:
         if self._backend is not None:
+            return self._backend
+        key = self._backend_key()
+        cached = _BACKEND_CACHE.get(key)
+        if cached is not None:
+            self._backend, self._module = cached
             return self._backend
         weights = TIMESFM_APPROVED[self.model_id]
         require_weights_allowed(self.model_id, weights)
@@ -104,12 +126,21 @@ class TimesFM25(Forecaster):
             force_download=False,
         )
         self._module = timesfm
+        _BACKEND_CACHE[key] = (self._backend, timesfm)
         return self._backend
 
     def _compile_for(self, horizon: int) -> None:
         target = max(int(horizon), self._max_horizon)
         target = ((target + _OUTPUT_PATCH - 1) // _OUTPUT_PATCH) * _OUTPUT_PATCH
-        if self._compiled_horizon is not None and self._compiled_horizon >= target:
+        key = (
+            self.model_id,
+            self.revision,
+            self._max_context,
+            self._use_quantile_head,
+        )
+        already = _COMPILED_HORIZON.get(key, 0)
+        if already >= target:
+            self._compiled_horizon = already
             return
         config = self._module.ForecastConfig(
             max_context=self._max_context,
@@ -123,6 +154,7 @@ class TimesFM25(Forecaster):
             fix_quantile_crossing=True,
         )
         self._backend.compile(config)
+        _COMPILED_HORIZON[key] = target
         self._compiled_horizon = target
 
     def fit(self, y: Sequence[float] | Any, **kwargs: Any) -> TimesFM25:

@@ -76,6 +76,7 @@ class ExperimentConfig:
     seed: int | None = None
     season_length: int = 1
     track_memory: bool = True
+    warmup: bool = False
     datasets_config: Path = DEFAULT_DATASETS_CONFIG
     split_manifest: Path | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -100,6 +101,11 @@ class ExperimentConfig:
             raise RunnerError(
                 f"{source}: 'track_memory' must be a boolean, got {track_memory!r}"
             )
+        warmup = raw.get("warmup", False)
+        if not isinstance(warmup, bool):
+            raise RunnerError(
+                f"{source}: 'warmup' must be a boolean, got {warmup!r}"
+            )
         override = os.environ.get(RESULTS_DIR_ENV)
         output_dir = Path(override or raw.get("output_dir") or DEFAULT_RESULTS_DIR)
         manifest = raw.get("split_manifest") or dataset.get("split_manifest")
@@ -113,6 +119,7 @@ class ExperimentConfig:
             seed=seed,
             season_length=int(raw.get("season_length", 1)),
             track_memory=track_memory,
+            warmup=warmup,
             datasets_config=Path(raw.get("datasets_config", DEFAULT_DATASETS_CONFIG)),
             split_manifest=Path(manifest) if manifest else None,
             metadata={k: v for k, v in raw.items() if k not in {"dataset", "models"}},
@@ -414,6 +421,7 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
                 series_id=s.series_id,
                 season_length=experiment.season_length,
                 track_memory=experiment.track_memory,
+                warmup=experiment.warmup,
             )
             all_rows.extend(
                 _rows_for_model(

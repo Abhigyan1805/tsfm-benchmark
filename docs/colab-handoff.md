@@ -170,8 +170,14 @@ artifacts.
 
 The `kaggle` CLI is installed and authenticated on the D-drive machine
 (`kaggle config view` reports the username). Internet-enabled kernels are
-verified working, so the kernel clones the repo and pip-installs the TSFM
-packages at run time.
+verified working, so the kernel pip-installs the TSFM packages at run time.
+
+The GitHub repo is **private**, so an anonymous `git clone` inside the kernel
+fails (`could not read Username for 'https://github.com'`). The verified route
+bundles the pinned ref into a **private Kaggle dataset** and points `--repo` at
+the bundle under `/kaggle/input` (see B6); nothing about the repo becomes public.
+The job route in B1–B5 (`--jobs`) clones the same way, so it needs the same
+`--repo`/`--dataset-source` treatment when the repo is private.
 
 ### B1. Preflight and plan (resumable, no network push)
 
@@ -246,6 +252,86 @@ raw evidence, and only the aggregates/summaries that the evaluation slice
 produces are committed.
 
 ---
+
+### B6. Experiment runs (the GPU tier's real sweep)
+
+The job route above scores one holdout per job. The benchmark's GPU tier instead
+runs the same rolling-origin experiment runner the CPU families used, so its
+rows land on the exact frozen windows. The `experiments` subcommand packs
+pending experiment configs into one self-contained kernel.
+
+Because the repo is private, attach a pinned bundle as a private dataset first
+(the bundle is a single file, so it uploads in seconds; the dataset stays
+private):
+
+```sh
+REF="$(git rev-parse HEAD)"          # pin the exact commit the kernel clones
+mkdir -p /tmp/tsbench-repo-dataset
+git bundle create /tmp/tsbench-repo-dataset/tsbench-repo.bundle "$REF"
+cat > /tmp/tsbench-repo-dataset/dataset-metadata.json <<'JSON'
+{"title": "tsbench repo snapshot", "id": "abhigyan1818/tsbench-repo-snapshot",
+ "licenses": [{"name": "other"}]}
+JSON
+kaggle datasets create -p /tmp/tsbench-repo-dataset -r zip   # private by default
+kaggle datasets status abhigyan1818/tsbench-repo-snapshot     # wait for "ready"
+```
+
+Then probe one series x one model x one horizon before the full sweep:
+
+```sh
+python scripts/kaggle_run.py experiments \
+    --config configs/experiments/gpu_probe.yaml \
+    --out results/kaggle-gpu-probe --ref "$REF" \
+    --repo /kaggle/input/tsbench-repo-snapshot/tsbench-repo.bundle \
+    --dataset-source abhigyan1818/tsbench-repo-snapshot \
+    --pip 'timesfm[torch]' --pip chronos-forecasting --timeout 2400
+```
+
+Pin `--ref` to the branch tip that carries the process-level TSFM backend
+cache (the wrappers cache the loaded checkpoint and the TimesFM compile per
+process); the kernel asserts the clone contains it and refuses to run
+otherwise. The default `$(git rev-parse HEAD)` is only safe when executed on
+that branch, never on `main`. The GPU configs set `warmup: true`, so the
+one-time checkpoint load and compile are primed before the first scored window
+and do not skew its `latency_ms`.
+
+The kernel clones `--repo` at `--ref`, installs the extra packages, fetches and
+checksum-verifies the frozen dataset through `python -m
+tsbench.data.build_catalog --materialize`, runs each pending config with
+`python -m tsbench run`, and bundles the run directories as
+`/kaggle/working/<run-name>/results.tar.gz`. The bundle is refreshed after
+**every** config (run dirs live in `/tmp` until bundled), so a config that hits
+the Kaggle runtime limit cannot discard the configs that already completed. A
+config that fails does not stop the rest, but a dataset fetch/checksum failure
+aborts the kernel before any config runs.
+
+The generated kernel also resolves `--repo` wherever Kaggle mounted the data
+(`/kaggle/input/<slug>` and the newer `/kaggle/input/datasets/<owner>/<slug>`),
+so the same command works across Kaggle's mount-layout changes. Kaggle rejects a
+push whose title does not slugify to the kernel id's slug; the CLI builds a
+title that does (`default_title`).
+
+Resume is by `config_hash`: a config whose `run.json` is already under `--out`
+is skipped and never packed, so a re-run after a preemption only measures the
+gap. `--dry-run` builds and prints the kernel without pushing.
+
+Recommended sequence for the primary sweep (after the probe succeeds):
+
+```sh
+python scripts/kaggle_run.py experiments \
+    --config configs/experiments/gpu.yaml \
+    --config configs/experiments/gpu_h48.yaml \
+    --config configs/experiments/gpu_h96.yaml \
+    --config configs/experiments/gpu_h192.yaml \
+    --out results --ref "$REF" \
+    --repo /kaggle/input/tsbench-repo-snapshot/tsbench-repo.bundle \
+    --dataset-source abhigyan1818/tsbench-repo-snapshot \
+    --pip 'timesfm[torch]' --pip chronos-forecasting --timeout 14400
+```
+
+`make report` then merges `results/` with the committed
+`docs/telemetry/{cpu,gpu}/` store, so the combined CPU + GPU summary and figures
+regenerate from committed evidence.
 
 ## License policy (enforced in code)
 

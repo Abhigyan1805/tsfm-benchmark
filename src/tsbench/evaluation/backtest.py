@@ -70,19 +70,58 @@ class WindowForecast:
         return self.error is None
 
 
+def _cuda_meter() -> Any | None:
+    """Return the torch module when a CUDA device is live, else ``None``.
+
+    Peak memory is the GPU allocator's peak on a GPU host and the host
+    ``tracemalloc`` peak otherwise. Importing torch is deferred so a CPU-only
+    or torch-free worker never pays for it.
+    """
+    try:
+        import torch
+    except ImportError:
+        return None
+    cuda = getattr(torch, "cuda", None)
+    if cuda is None or not cuda.is_available():
+        return None
+    return torch
+
+
+def _cuda_peak_memory(torch: Any) -> tuple[Callable[[], None], Callable[[], float | None]]:
+    """Per-window CUDA allocator peak, baselined on live allocations."""
+    state = {"baseline": 0}
+
+    def start_window() -> None:
+        torch.cuda.synchronize()
+        state["baseline"] = torch.cuda.memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
+
+    def stop_window() -> float | None:
+        torch.cuda.synchronize()
+        peak = torch.cuda.max_memory_allocated()
+        return max(0.0, (peak - state["baseline"]) / (1024 * 1024))
+
+    return start_window, stop_window
+
+
 def measure_peak_memory(
     *, enabled: bool = True
 ) -> tuple[Callable[[], None], Callable[[], float | None]]:
     """Start peak-memory tracking; return ``(start_window, stop_window)``.
 
-    ``tracemalloc`` is process-global and its peak accumulates since tracing
-    started, so a single global peak would smear the largest window across every
-    later row. ``start_window`` re-baselines and resets the peak; ``stop_window``
-    returns megabytes allocated at peak since that call. When disabled, both
+    On a CUDA host the measured peak is the GPU allocator's live-allocation
+    peak, re-baselined for every window (so one-time weight loading is charged
+    only to the window that performed it). Without CUDA the host
+    ``tracemalloc`` peak is used; it is process-global and accumulates since
+    tracing started, so ``start_window`` re-baselines and resets it rather than
+    smearing the largest window across every later row. When disabled, both
     halves are no-ops and no overhead is paid.
     """
     if not enabled:
         return (lambda: None), (lambda: None)
+    torch = _cuda_meter()
+    if torch is not None:
+        return _cuda_peak_memory(torch)
     if not tracemalloc.is_tracing():
         tracemalloc.start()
     baseline_mb = tracemalloc.get_traced_memory()[0] / (1024 * 1024)
@@ -99,6 +138,27 @@ def measure_peak_memory(
     return start_window, stop_window
 
 
+def _warm_up(
+    model_builder: Callable[[], Any],
+    horizon: int,
+    context: np.ndarray,
+) -> None:
+    """Fit and predict once, discarding the result, to prime process caches.
+
+    The zero-shot TSFM wrappers load (and TimesFM compiles) their checkpoint on
+    the first prediction; without a warm-up that one-time cost lands in the
+    first scored window's ``latency_ms`` and skews the percentile used by the
+    cost figure. A failure here is ignored: the scored windows record their own
+    errors.
+    """
+    try:
+        model = model_builder()
+        model.fit(np.array(context, dtype=np.float64, copy=True))
+        np.asarray(model.predict(horizon), dtype=np.float64)
+    except Exception:  # noqa: BLE001 - warm-up is best-effort
+        return
+
+
 def backtest_windows(
     values: np.ndarray,
     plan: SplitPlan,
@@ -109,6 +169,7 @@ def backtest_windows(
     metrics_fn: Callable[..., dict[str, float]] = _metrics.metric_set,
     season_length: int = 1,
     track_memory: bool = True,
+    warmup: bool = False,
     model_name: str | None = None,
     family: str | None = None,
 ) -> list[WindowForecast]:
@@ -116,20 +177,25 @@ def backtest_windows(
 
     A failing model on one window is recorded with ``error`` set and does not
     abort the remaining windows; a caller who wants strictness can check
-    :attr:`WindowForecast.ok` on the returned rows.
+    :attr:`WindowForecast.ok` on the returned rows. ``warmup`` primes the
+    model's process caches (e.g. loaded TSFM weights) before the first scored
+    window so one-time setup is not charged to a single row's latency.
     """
     series = np.asarray(values, dtype=np.float64).reshape(-1)
     displayed_name, displayed_family = _resolve_labels(
         model_builder, model_name=model_name, family=family
     )
     windows = iter_windows(series, plan, period=period)
+    if warmup and windows:
+        _warm_up(model_builder, plan.config.horizon, windows[0][1])
     start_memory, stop_memory = measure_peak_memory(enabled=track_memory)
     results: list[WindowForecast] = []
     for index, (origin, context, target) in enumerate(windows):
         assert_no_future_data(plan, origin, plan.config.context_length, plan.config.horizon)
         start_memory()
         model = model_builder()
-        params, zero_shot = _model_metadata(model)
+        params: Any = None
+        zero_shot: bool | None = None
         context_values = np.array(context, dtype=np.float64, copy=True)
         target_values = np.array(target, dtype=np.float64, copy=True)
         train_seconds: float | None = None
@@ -138,6 +204,9 @@ def backtest_windows(
             train_start = time.perf_counter()
             model.fit(context_values)
             train_seconds = time.perf_counter() - train_start
+            # Read metadata after fit: trained families (deep) only know their
+            # parameter count once the network is built.
+            params, zero_shot = _model_metadata(model)
             forecast = np.asarray(model.predict(plan.config.horizon), dtype=np.float64).reshape(-1)
             latency_ms = (time.perf_counter() - start) * 1000.0
             if forecast.size != target_values.size:

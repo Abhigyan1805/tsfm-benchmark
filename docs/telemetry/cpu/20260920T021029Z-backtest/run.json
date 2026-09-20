@@ -1,0 +1,79 @@
+{
+  "config": {
+    "dataset": {
+      "loader": "monash_tsf",
+      "max_series": null,
+      "name": "electricity_hourly",
+      "split_manifest": "data/manifests/electricity_hourly_split_manifest.json"
+    },
+    "description": "Rolling-origin backtest over 24 electricity series at the primary 24h horizon, with the context length treated as a first-class variable.",
+    "model_configs": {
+      "auto_ets": {
+        "kwargs": {
+          "season_length": 24
+        }
+      },
+      "seasonal_naive": {
+        "kwargs": {
+          "season_length": 24
+        }
+      },
+      "xgboost_lags": {
+        "kwargs": {
+          "lags": [
+            1,
+            2,
+            3,
+            24,
+            25,
+            48
+          ],
+          "use_calendar": true
+        }
+      }
+    },
+    "models": [
+      "naive",
+      "seasonal_naive",
+      "auto_ets",
+      "auto_arima",
+      "xgboost_lags"
+    ],
+    "name": "backtest",
+    "output_dir": "results",
+    "season_length": 24,
+    "seed": 20240919,
+    "split": {
+      "context_length": 168,
+      "horizon": 24,
+      "min_train_size": 168,
+      "stride": 240,
+      "test_frac": 0.2,
+      "train_frac": 0.6,
+      "val_frac": 0.2
+    },
+    "stage": "backtest",
+    "subset": {
+      "note": "First real results. The full-stride (24-step) sweep is a follow-up; the frozen split boundaries and leakage guarantees are identical.",
+      "origin_stride": 240,
+      "origins_per_series_per_horizon": "21-22",
+      "series": "all 24 frozen evaluation series (T1..T308, evenly spaced)"
+    },
+    "track_memory": false
+  },
+  "config_hash": "ede61843e5ee7dde",
+  "environment": {
+    "dirty": true,
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "python": "3.12.14"
+  },
+  "experiment": "backtest",
+  "finished_at": "2026-09-20T02:22:01+00:00",
+  "git_sha": "7fd54a36a28eddab8c6b1f943fff5a8f04111bdc",
+  "measured": true,
+  "n_rows": 2640,
+  "run_id": "20260920T021029Z-backtest",
+  "seed": 20240919,
+  "split_manifest": "970cc0b44bd7593f2a513551db971087d8747c1a59260d3d1a0a4d9498a6d768",
+  "started_at": "2026-09-20T02:10:29+00:00"
+}

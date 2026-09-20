@@ -1,0 +1,67 @@
+# GPU connectivity probe: run all four GPU-tier registry keys on the tiny
+# committed fixture before spending a full kernel on the electricity sweep.
+#
+# It exercises the same code path as the real GPU configs -- registry license
+# gate, real TimesFM 2.5 / Chronos-Bolt weight download, deep training and
+# inference -- but finishes in seconds. Run it through the handoff
+# (docs/colab-handoff.md) when a fresh GPU session is first attached.
+name: gpu_probe
+stage: gpu
+description: >-
+  Tiny end-to-end GPU check of lstm, transformer, timesfm25 and chronos_bolt
+  on the committed smoke fixture.
+
+dataset:
+  name: smoke
+  loader: local_csv
+  path: tests/fixtures/smoke_series.csv
+  series_id: smoke_series
+  split_manifest: tests/fixtures/smoke_split_manifest.json
+
+split:
+  train_frac: 0.6
+  val_frac: 0.2
+  test_frac: 0.2
+  context_length: 20
+  horizon: 4
+  stride: 20
+  min_train_size: 5
+
+track_memory: true
+warmup: true
+
+models:
+  - lstm
+  - transformer
+  - timesfm25
+  - chronos_bolt
+
+model_configs:
+  lstm:
+    kwargs:
+      context: 8
+      hidden: 4
+      layers: 1
+      epochs: 2
+      batch_size: 8
+  transformer:
+    kwargs:
+      context: 8
+      hidden: 8
+      layers: 1
+      heads: 2
+      feedforward: 16
+      max_horizon: 4
+      epochs: 2
+      batch_size: 8
+  timesfm25:
+    kwargs:
+      max_context: 512
+      max_horizon: 128
+  chronos_bolt:
+    kwargs:
+      max_context: 512
+
+season_length: 1
+seed: 7
+output_dir: results

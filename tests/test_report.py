@@ -1,9 +1,11 @@
 """Integration coverage for the telemetry-store report script.
 
 ``scripts/make_plots.py`` is the executable contract behind ``make report``: it
-reads the run directories under ``results/``, keeps the newest run per
-``config_hash`` (so a re-run replaces its predecessor), collapses rows to one
-summary row per ``(model, family, horizon)``, and regenerates the figures.
+reads the run directories under ``results/`` and ``docs/telemetry/``, owns each
+experiment to the first root that provides it (keeping the newest run per
+``config_hash`` within a root, so a fresh run supersedes its predecessor rather
+than blending with it), collapses rows to one summary row per
+``(model, family, horizon)``, and regenerates the figures.
 These tests drive the script over a synthesised store, so they never need the
 real dataset or network.
 """
@@ -58,6 +60,10 @@ def _write_run(
 
 
 def _run_script(root: Path, summary: Path, figures: Path, *extra: str):
+    # Isolate from the repo's real committed telemetry store unless a caller
+    # passes its own --telemetry-root (argparse keeps the last one).
+    empty_telemetry = summary.parent / "_empty_telemetry"
+    empty_telemetry.mkdir(parents=True, exist_ok=True)
     return subprocess.run(
         [
             sys.executable,
@@ -70,6 +76,8 @@ def _run_script(root: Path, summary: Path, figures: Path, *extra: str):
             str(summary),
             "--figures-dir",
             str(figures),
+            "--telemetry-root",
+            str(empty_telemetry),
             *extra,
         ],
         capture_output=True,
@@ -136,6 +144,21 @@ def test_make_plots_refuses_to_average_distinct_configs_at_the_same_horizon(
     assert "ambiguous" in proc.stderr
     assert "Traceback" not in proc.stderr
 
+    first_hash = RunContext.create(
+        "backtest",
+        {"name": "backtest", "horizon": 24},
+        run_id="20240101T000000Z-backtest",
+        cwd=root,
+    ).config_sha
+    second_hash = RunContext.create(
+        "backtest_full",
+        {"name": "backtest_full", "horizon": 24, "stride": 24},
+        run_id="20240102T000000Z-full",
+        cwd=root,
+    ).config_sha
+    assert first_hash in proc.stderr
+    assert second_hash in proc.stderr
+
     with open(summary_path, newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert [row["model"] for row in rows] == ["naive"]
@@ -150,6 +173,183 @@ def test_make_plots_reports_an_empty_store_without_a_traceback(tmp_path: Path):
     assert proc.returncode == 2
     assert "error:" in proc.stderr
     assert "Traceback" not in proc.stderr
+
+
+def test_make_plots_carries_peak_memory_params_and_zero_shot(tmp_path: Path):
+    root = tmp_path / "results"
+    root.mkdir()
+    context = RunContext.create(
+        "gpu", {"name": "gpu", "horizon": 24}, run_id="20240102T000000Z-gpu", cwd=root
+    )
+    rows = [
+        result_row(
+            run_id=context.run_id,
+            dataset=DATASET,
+            series_id="S0",
+            model="timesfm25",
+            family="tsfm",
+            context_length=168,
+            horizon=24,
+            window_index=0,
+            mae=90.0,
+            rmse=120.0,
+            mase=0.9,
+            smape=9.0,
+            latency_ms=30.0,
+            peak_mem_mb=812.5,
+            params=231289280,
+            zero_shot=True,
+            git_sha=context.git_sha,
+            config_hash=context.config_sha,
+        ),
+        result_row(
+            run_id=context.run_id,
+            dataset=DATASET,
+            series_id="S0",
+            model="lstm",
+            family="deep",
+            context_length=168,
+            horizon=24,
+            window_index=0,
+            mae=95.0,
+            rmse=125.0,
+            mase=0.95,
+            smape=9.5,
+            latency_ms=12.0,
+            peak_mem_mb=3.5,
+            params=1234,
+            zero_shot=False,
+            git_sha=context.git_sha,
+            config_hash=context.config_sha,
+        ),
+    ]
+    write_results(rows, root=root, context=context)
+
+    # A committed telemetry root is merged with the live store.
+    telemetry = tmp_path / "telemetry"
+    telemetry.mkdir()
+    old = RunContext.create(
+        "backtest",
+        {"name": "backtest", "horizon": 24},
+        run_id="20240101T000000Z-backtest",
+        cwd=root,
+    )
+    write_results(
+        [
+            result_row(
+                run_id=old.run_id,
+                dataset=DATASET,
+                series_id="S1",
+                model="naive",
+                family="baseline",
+                context_length=168,
+                horizon=24,
+                window_index=0,
+                mae=1.0,
+                rmse=2.0,
+                mase=1.0,
+                smape=1.0,
+                latency_ms=0.1,
+                git_sha=old.git_sha,
+                config_hash=old.config_sha,
+            )
+        ],
+        root=telemetry,
+        context=old,
+    )
+
+    summary_path = tmp_path / "summary.csv"
+    proc = _run_script(
+        root,
+        summary_path,
+        tmp_path / "figures",
+        "--no-figures",
+        "--telemetry-root",
+        str(telemetry),
+    )
+    assert proc.returncode == 0, proc.stderr
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        by_model = {row["model"]: row for row in csv.DictReader(handle)}
+    assert set(by_model) == {"timesfm25", "lstm", "naive"}
+    assert float(by_model["timesfm25"]["peak_mem_mb"]) == pytest.approx(812.5)
+    assert float(by_model["timesfm25"]["params"]) == pytest.approx(231289280)
+    assert by_model["timesfm25"]["zero_shot"] == "True"
+    assert by_model["lstm"]["zero_shot"] == "False"
+    # The baseline from the committed telemetry root is present, and its
+    # untrained train_seconds is empty rather than zero.
+    assert by_model["naive"]["train_seconds"].strip() == ""
+
+
+def test_make_plots_recurses_into_tiered_telemetry(tmp_path: Path):
+    """The committed store is nested as docs/telemetry/{cpu,gpu}/<run_id>."""
+    root = tmp_path / "results"
+    root.mkdir()
+    telemetry = tmp_path / "telemetry"
+    _write_run(
+        telemetry / "cpu",
+        "20240101T000000Z-backtest",
+        {"name": "backtest", "horizon": 24},
+        [("naive", "baseline", 24, 1.0, 0.1)],
+    )
+    _write_run(
+        telemetry / "gpu",
+        "20240102T000000Z-gpu",
+        {"name": "gpu", "horizon": 24},
+        [("timesfm25", "tsfm", 24, 90.0, 30.0)],
+    )
+    summary_path = tmp_path / "summary.csv"
+    proc = _run_script(
+        root,
+        summary_path,
+        tmp_path / "figures",
+        "--no-figures",
+        "--telemetry-root",
+        str(telemetry),
+    )
+    assert proc.returncode == 0, proc.stderr
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        by_model = {row["model"]: row for row in csv.DictReader(handle)}
+    assert set(by_model) == {"naive", "timesfm25"}
+
+
+def test_make_plots_prefers_the_live_root_over_stale_telemetry(tmp_path: Path):
+    """A fresh run supersedes a committed telemetry copy of the same rows."""
+    root = tmp_path / "results"
+    _write_run(
+        root,
+        "20240201T000000Z-backtest",
+        {"name": "backtest", "horizon": 24, "stride": 240},
+        [("naive", "baseline", 24, 2.0, 0.2)],
+    )
+    telemetry = tmp_path / "telemetry"
+    _write_run(
+        telemetry / "cpu",
+        "20240101T000000Z-backtest",
+        {"name": "backtest", "horizon": 24, "stride": 240, "note": "old"},
+        [("naive", "baseline", 24, 100.0, 0.1)],
+    )
+    _write_run(
+        telemetry / "gpu",
+        "20240102T000000Z-gpu",
+        {"name": "gpu", "horizon": 24},
+        [("timesfm25", "tsfm", 24, 90.0, 30.0)],
+    )
+    summary_path = tmp_path / "summary.csv"
+    proc = _run_script(
+        root,
+        summary_path,
+        tmp_path / "figures",
+        "--no-figures",
+        "--telemetry-root",
+        str(telemetry),
+    )
+    assert proc.returncode == 0, proc.stderr
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        by_model = {row["model"]: row for row in csv.DictReader(handle)}
+    assert set(by_model) == {"naive", "timesfm25"}
+    assert float(by_model["naive"]["mae"]) == pytest.approx(2.0)
+    assert int(by_model["naive"]["n_windows"]) == 1
+    assert float(by_model["timesfm25"]["mae"]) == pytest.approx(90.0)
 
 
 @pytest.mark.skipif(
