@@ -949,7 +949,6 @@ def test_cli_reports_invalid_config_without_a_traceback(
     assert "Traceback" not in captured.err
 
 
-
 def test_runner_track_memory_false_leaves_peak_mem_empty(tmp_path: Path):
     """`track_memory: false` skips tracemalloc but still measures latency."""
     import yaml

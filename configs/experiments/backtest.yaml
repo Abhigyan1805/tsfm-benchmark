@@ -33,7 +33,7 @@ split:
 
 # Bounded-subset provenance, recorded verbatim in run.json.
 subset:
-  series: all 24 frozen evaluation series (T1..T308, evenly spaced)
+  series: all 24 frozen evaluation series (evenly spaced across T1..T321; exact ids in the split manifest)
   origin_stride: 240
   origins_per_series_per_horizon: "21-22"
   note: >-
