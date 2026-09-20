@@ -93,6 +93,30 @@ def test_experiment_slug_is_deterministic_and_ref_sensitive():
     assert first.startswith("tsbench-gpu-exp-")
 
 
+def test_default_title_slugifies_back_to_the_kernel_slug():
+    """Kaggle rejects a push whose title does not resolve to the id's slug."""
+    kaggle = _load_kaggle()
+    slug = "tsbench-gpu-exp-abc123"
+    title = kaggle.default_title(slug)
+    assert title == "tsbench gpu exp abc123"
+    assert title.replace(" ", "-") == slug
+
+
+def test_experiment_kernel_source_resolves_dataset_mount_layouts():
+    """Kaggle has used both /kaggle/input/<slug> and /kaggle/input/datasets/..."""
+    kaggle = _load_kaggle()
+    source = kaggle.experiment_kernel_source(
+        ["configs/experiments/gpu.yaml"],
+        repo="/kaggle/input/datasets/owner/snapshot/repo.bundle",
+        ref="deadbeef",
+        run_name="run-1",
+        pip_packages=[],
+    )
+    assert 'Path("/kaggle/input").rglob' in source
+    assert "resolved REPO to" in source
+
+
+
 def test_experiment_config_hash_matches_the_runner():
     kaggle = _load_kaggle()
     for name in GPU_CONFIGS:

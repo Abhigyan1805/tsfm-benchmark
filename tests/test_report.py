@@ -58,6 +58,10 @@ def _write_run(
 
 
 def _run_script(root: Path, summary: Path, figures: Path, *extra: str):
+    # Isolate from the repo's real committed telemetry store unless a caller
+    # passes its own --telemetry-root (argparse keeps the last one).
+    empty_telemetry = summary.parent / "_empty_telemetry"
+    empty_telemetry.mkdir(parents=True, exist_ok=True)
     return subprocess.run(
         [
             sys.executable,
@@ -70,6 +74,8 @@ def _run_script(root: Path, summary: Path, figures: Path, *extra: str):
             str(summary),
             "--figures-dir",
             str(figures),
+            "--telemetry-root",
+            str(empty_telemetry),
             *extra,
         ],
         capture_output=True,
@@ -255,6 +261,38 @@ def test_make_plots_carries_peak_memory_params_and_zero_shot(tmp_path: Path):
     # The baseline from the committed telemetry root is present, and its
     # untrained train_seconds is empty rather than zero.
     assert by_model["naive"]["train_seconds"].strip() == ""
+
+
+def test_make_plots_recurses_into_tiered_telemetry(tmp_path: Path):
+    """The committed store is nested as docs/telemetry/{cpu,gpu}/<run_id>."""
+    root = tmp_path / "results"
+    root.mkdir()
+    telemetry = tmp_path / "telemetry"
+    _write_run(
+        telemetry / "cpu",
+        "20240101T000000Z-backtest",
+        {"name": "backtest", "horizon": 24},
+        [("naive", "baseline", 24, 1.0, 0.1)],
+    )
+    _write_run(
+        telemetry / "gpu",
+        "20240102T000000Z-gpu",
+        {"name": "gpu", "horizon": 24},
+        [("timesfm25", "tsfm", 24, 90.0, 30.0)],
+    )
+    summary_path = tmp_path / "summary.csv"
+    proc = _run_script(
+        root,
+        summary_path,
+        tmp_path / "figures",
+        "--no-figures",
+        "--telemetry-root",
+        str(telemetry),
+    )
+    assert proc.returncode == 0, proc.stderr
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        by_model = {row["model"]: row for row in csv.DictReader(handle)}
+    assert set(by_model) == {"naive", "timesfm25"}
 
 
 @pytest.mark.skipif(

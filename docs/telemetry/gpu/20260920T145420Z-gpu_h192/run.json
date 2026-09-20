@@ -1,0 +1,90 @@
+{
+  "config": {
+    "dataset": {
+      "loader": "monash_tsf",
+      "max_series": null,
+      "name": "electricity_hourly",
+      "split_manifest": "data/manifests/electricity_hourly_split_manifest.json"
+    },
+    "description": "Deep + zero-shot TSFM rolling-origin backtest over the 24 electricity series at the 192h horizon (primary sweep 24/48/96/192), on the CPU families' frozen windows.",
+    "model_configs": {
+      "chronos_bolt": {
+        "kwargs": {
+          "max_context": 512
+        }
+      },
+      "lstm": {
+        "kwargs": {
+          "batch_size": 64,
+          "context": 32,
+          "epochs": 50,
+          "hidden": 32,
+          "layers": 1,
+          "lr": 0.01
+        }
+      },
+      "timesfm25": {
+        "kwargs": {
+          "max_context": 512,
+          "max_horizon": 128
+        }
+      },
+      "transformer": {
+        "kwargs": {
+          "batch_size": 64,
+          "context": 32,
+          "epochs": 50,
+          "feedforward": 64,
+          "heads": 4,
+          "hidden": 32,
+          "layers": 2,
+          "lr": 0.01,
+          "max_horizon": 32
+        }
+      }
+    },
+    "models": [
+      "lstm",
+      "transformer",
+      "timesfm25",
+      "chronos_bolt"
+    ],
+    "name": "gpu_h192",
+    "output_dir": "results",
+    "season_length": 24,
+    "seed": 20240919,
+    "split": {
+      "context_length": 168,
+      "horizon": 192,
+      "min_train_size": 168,
+      "stride": 240,
+      "test_frac": 0.2,
+      "train_frac": 0.6,
+      "val_frac": 0.2
+    },
+    "stage": "gpu",
+    "subset": {
+      "note": "GPU tier, same frozen windows as the CPU backtest. The full-stride (24-step) sweep is a follow-up.",
+      "origin_stride": 240,
+      "origins_per_series_per_horizon": "21-22",
+      "series": "all 24 frozen evaluation series (T1..T308, evenly spaced)"
+    },
+    "track_memory": true,
+    "warmup": true
+  },
+  "config_hash": "ef768c17c85b2a8c",
+  "environment": {
+    "dirty": false,
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "python": "3.12.13"
+  },
+  "experiment": "gpu_h192",
+  "finished_at": "2026-09-20T15:12:01+00:00",
+  "git_sha": "dcb2c10e4ac97b1d1289825869826fdec84593f7",
+  "measured": true,
+  "n_rows": 2016,
+  "run_id": "20260920T145420Z-gpu_h192",
+  "seed": 20240919,
+  "split_manifest": "970cc0b44bd7593f2a513551db971087d8747c1a59260d3d1a0a4d9498a6d768",
+  "started_at": "2026-09-20T14:54:20+00:00"
+}

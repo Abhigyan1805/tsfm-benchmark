@@ -86,12 +86,15 @@ def _truthy(value: Any) -> bool:
 def _read_runs(
     root: Path, *, dataset: str | None
 ) -> list[tuple[Path, dict[str, Any], pd.DataFrame]]:
-    """Read every run directory under one root (no dedupe yet)."""
+    """Read every run directory under one root (no dedupe yet).
+
+    Run dirs are discovered recursively so a store organised by tier
+    (``docs/telemetry/cpu/<run_id>`` and ``docs/telemetry/gpu/<run_id>``) merges
+    with the flat live ``results/<run_id>`` layout.
+    """
     found: list[tuple[Path, dict[str, Any], pd.DataFrame]] = []
-    for directory in sorted(root.iterdir()):
-        csv_path = directory / "results.csv"
-        if not directory.is_dir() or not csv_path.is_file():
-            continue
+    for csv_path in sorted(root.rglob("results.csv")):
+        directory = csv_path.parent
         metadata: dict[str, Any] = {}
         run_json = directory / "run.json"
         if run_json.is_file():

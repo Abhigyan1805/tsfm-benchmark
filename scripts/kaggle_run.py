@@ -223,6 +223,16 @@ def build_kernel_dir(
     return metadata
 
 
+def default_title(slug: str) -> str:
+    """A human-readable title whose Kaggle slug resolves back to ``slug``.
+
+    Kaggle rejects a push when the title does not slugify to the kernel id's
+    slug component, so the default title is the slug with hyphens as spaces
+    (``tsbench-gpu-exp-<hash>`` -> ``tsbench gpu exp <hash>``).
+    """
+    return slug.replace("-", " ")
+
+
 def experiment_slug(configs: list[str], ref: str) -> str:
     """Deterministic, kaggle-valid slug for an (experiment batch, ref) pair."""
     digest = hashlib.sha256(
@@ -271,6 +281,15 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("TSBENCH_ALLOW_MODEL_DOWNLOAD", "1")
 os.environ.setdefault("HF_HOME", "/tmp/hf")
 
+# Kaggle has mounted datasets at both /kaggle/input/<slug> and the newer
+# /kaggle/input/datasets/<owner>/<slug>; resolve a local bundle source to
+# wherever it actually landed instead of hardcoding one layout.
+if REPO.startswith("/kaggle/input") and not Path(REPO).exists():
+    _matches = sorted(Path("/kaggle/input").rglob(Path(REPO).name))
+    if _matches:
+        REPO = str(_matches[0])
+        print("resolved REPO to", REPO, flush=True)
+
 if PIP_PACKAGES:
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-q", *PIP_PACKAGES], check=True
@@ -300,20 +319,29 @@ materialize = subprocess.run(
 )
 print("materialize exit", materialize.returncode, flush=True)
 
+
+def bundle_results():
+    # Refresh the download bundle after every config so a later config that
+    # exhausts the Kaggle runtime limit cannot discard the completed ones:
+    # the run dirs live in /tmp until they are bundled into /kaggle/working.
+    archive = RESULTS_DIR / "results.tar.gz"
+    source = REPO_DIR / "results"
+    with tarfile.open(archive, "w:gz") as handle:
+        if source.is_dir():
+            for path in sorted(source.rglob("*")):
+                if path.is_file() and not path.name.endswith(".tmp"):
+                    handle.add(path, arcname=str(path.relative_to(source)))
+
+
 for config in CONFIGS:
     completed = subprocess.run(
         [sys.executable, "-m", "tsbench", "run", "--config", config],
         cwd=str(REPO_DIR), env=env,
     )
     print("experiment", config, "exit", completed.returncode, flush=True)
+    bundle_results()
+    print("bundled", config, flush=True)
 
-archive = RESULTS_DIR / "results.tar.gz"
-source = REPO_DIR / "results"
-with tarfile.open(archive, "w:gz") as handle:
-    if source.is_dir():
-        for path in sorted(source.rglob("*")):
-            if path.is_file() and not path.name.endswith(".tmp"):
-                handle.add(path, arcname=str(path.relative_to(source)))
 print("KAGGLE_EXPERIMENT_DIR", RESULTS_DIR)
 '''
 
@@ -543,7 +571,7 @@ def _resolve_build(args: argparse.Namespace) -> dict[str, Any]:
         pending_jobs,
         owner=owner,
         slug=slug,
-        title=args.title or f"tsbench GPU batch {slug}",
+        title=args.title or default_title(slug),
         repo=args.repo,
         ref=ref,
         run_name=run_name,
@@ -693,7 +721,7 @@ def cmd_experiments(args: argparse.Namespace) -> int:
         [],
         owner=owner,
         slug=slug,
-        title=args.title or f"tsbench GPU experiments {slug}",
+        title=args.title or default_title(slug),
         repo=args.repo,
         ref=args.ref,
         run_name=run_name,
