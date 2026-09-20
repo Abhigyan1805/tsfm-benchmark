@@ -1,0 +1,371 @@
+#!/usr/bin/env python3
+"""Aggregate the telemetry store and regenerate the results figures.
+
+The evaluation runner writes one directory per run under ``results/``::
+
+    results/<run_id>/results.csv    one row per (series, model, window)
+    results/<run_id>/run.json       provenance (git sha, config hash, split)
+
+This script reads that store, collapses it to one summary row per
+``(model, family, horizon)``, and writes:
+
+* ``docs/results_summary.csv`` -- the committed machine-readable summary;
+* ``docs/figures/mase_by_family_horizon.png`` -- accuracy per family per horizon;
+* ``docs/figures/accuracy_vs_cost.png`` -- the accuracy/cost scatter.
+
+Several runs may cover the same dataset (for example a horizon sweep). Each run
+carries a ``config_hash``; only the newest run per hash is used so a re-run
+replaces rather than double-counts its predecessor.
+
+Examples::
+
+    python scripts/make_plots.py
+    python scripts/make_plots.py --results-root results --dataset electricity_hourly
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+SUMMARY_COLUMNS = [
+    "dataset",
+    "horizon",
+    "family",
+    "model",
+    "context_length",
+    "n_windows",
+    "n_series",
+    "mae",
+    "rmse",
+    "mase",
+    "smape",
+    "latency_p50_ms",
+    "latency_p95_ms",
+    "train_seconds",
+]
+
+# Colour-blind-friendly qualitative palette, stable per family.
+_FAMILY_COLOURS = {
+    "baseline": "#4c72b0",
+    "classical": "#dd8452",
+    "ml": "#55a868",
+    "deep": "#c44e52",
+    "tsfm": "#8172b3",
+}
+
+
+class ReportError(RuntimeError):
+    """The telemetry store could not be summarised."""
+
+
+def _numeric(frame: pd.DataFrame, column: str) -> pd.Series:
+    if column not in frame:
+        return pd.Series([float("nan")] * len(frame), index=frame.index)
+    return pd.to_numeric(frame[column].replace("", None), errors="coerce")
+
+
+def load_runs(
+    root: str | Path, *, dataset: str | None = None
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    """Load every run under ``root``, keeping the newest per ``config_hash``."""
+    root = Path(root)
+    if not root.is_dir():
+        raise ReportError(f"results root not found: {root}")
+    candidates: list[tuple[Path, dict[str, Any]]] = []
+    for directory in sorted(root.iterdir()):
+        csv_path = directory / "results.csv"
+        if not directory.is_dir() or not csv_path.is_file():
+            continue
+        metadata: dict[str, Any] = {}
+        run_json = directory / "run.json"
+        if run_json.is_file():
+            try:
+                metadata = json.loads(run_json.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                print(f"warning: ignoring {run_json}: {exc}", file=sys.stderr)
+        metadata["_dir"] = directory
+        candidates.append((directory, metadata))
+
+    newest: dict[str, tuple[Path, dict[str, Any]]] = {}
+    for directory, metadata in candidates:
+        config_hash = str(metadata.get("config_hash") or directory.name)
+        previous = newest.get(config_hash)
+        if previous is None or directory.name > previous[0].name:
+            newest[config_hash] = (directory, metadata)
+
+    frames: list[pd.DataFrame] = []
+    runs: list[dict[str, Any]] = []
+    for directory, metadata in sorted(newest.values(), key=lambda item: item[0].name):
+        frame = pd.read_csv(directory / "results.csv")
+        if frame.empty:
+            continue
+        if dataset is not None and "dataset" in frame:
+            frame = frame[frame["dataset"] == dataset]
+        if frame.empty:
+            continue
+        frame = frame.copy()
+        frame["_run_id"] = directory.name
+        frame["_git_sha"] = str(metadata.get("git_sha", "") or "")
+        frames.append(frame)
+        runs.append(
+            {
+                "run_id": directory.name,
+                "experiment": metadata.get("experiment"),
+                "config_hash": metadata.get("config_hash"),
+                "git_sha": metadata.get("git_sha"),
+                "n_rows": int(len(frame)),
+            }
+        )
+    if not frames:
+        raise ReportError(
+            f"no usable results under {root}"
+            + (f" for dataset {dataset!r}" if dataset else "")
+            + "; run `make backtest` first"
+        )
+    return pd.concat(frames, ignore_index=True), runs
+
+
+def summarise(frame: pd.DataFrame) -> pd.DataFrame:
+    """Collapse window rows to one summary row per ``(model, family, horizon)``.
+
+    A summary row must come from a single run. Two runs with different configs
+    can cover the same model and horizon (a stale run left behind by an
+    in-place config rewrite, or a full-stride follow-up); averaging them
+    silently would double-count windows, so that overlap is a hard error.
+    """
+    work = frame.copy()
+    for column in ("mae", "rmse", "mase", "smape", "latency_ms", "train_seconds"):
+        work[column] = _numeric(work, column)
+    work["horizon"] = pd.to_numeric(work["horizon"], errors="coerce").astype("Int64")
+    work["context_length"] = pd.to_numeric(
+        work["context_length"], errors="coerce"
+    ).astype("Int64")
+    if "_run_id" in work:
+        identity = work["_run_id"].astype(str)
+    else:
+        identity = work.get("config_hash", pd.Series("", index=work.index)).astype(str)
+
+    def _percentile(series: pd.Series, q: float) -> float:
+        clean = series.dropna()
+        return float(clean.quantile(q)) if not clean.empty else float("nan")
+
+    rows: list[dict[str, Any]] = []
+    keys = ["dataset", "horizon", "family", "model", "context_length"]
+    for key, group in work.groupby(keys, dropna=False):
+        dataset, horizon, family, model, context_length = key
+        run_ids = sorted(set(identity.loc[group.index]))
+        if len(run_ids) > 1:
+            raise ReportError(
+                f"ambiguous results: {model!r} ({family}) at horizon {horizon} "
+                f"appears in multiple runs ({', '.join(run_ids)}); remove the stale "
+                "run or scope --results-root to one config set so distinct configs "
+                "are not averaged"
+            )
+        rows.append(
+            {
+                "dataset": dataset,
+                "horizon": int(horizon) if pd.notna(horizon) else None,
+                "family": family,
+                "model": model,
+                "context_length": int(context_length) if pd.notna(context_length) else None,
+                "n_windows": int(len(group)),
+                "n_series": int(group["series_id"].nunique()),
+                "mae": float(group["mae"].mean()),
+                "rmse": float(group["rmse"].mean()),
+                "mase": float(group["mase"].mean()),
+                "smape": float(group["smape"].mean()),
+                "latency_p50_ms": _percentile(group["latency_ms"], 0.5),
+                "latency_p95_ms": _percentile(group["latency_ms"], 0.95),
+                "train_seconds": _percentile(group["train_seconds"], 0.5),
+            }
+        )
+    summary = pd.DataFrame(rows, columns=SUMMARY_COLUMNS)
+    summary = summary.sort_values(
+        by=["horizon", "mase", "model"], kind="stable"
+    ).reset_index(drop=True)
+    return summary
+
+
+def format_markdown(summary: pd.DataFrame) -> str:
+    """Render the summary as a GitHub-flavoured markdown table."""
+    headers = [
+        "horizon",
+        "family",
+        "model",
+        "MAE",
+        "RMSE",
+        "MASE",
+        "sMAPE",
+        "latency p50 (ms)",
+        "latency p95 (ms)",
+    ]
+
+    def _fmt(value: Any, digits: int = 4) -> str:
+        if value is None or (isinstance(value, float) and value != value):
+            return "n/a"
+        return f"{float(value):.{digits}f}"
+
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for _, row in summary.iterrows():
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(int(row["horizon"])) if pd.notna(row["horizon"]) else "n/a",
+                    str(row["family"]),
+                    str(row["model"]),
+                    _fmt(row["mae"]),
+                    _fmt(row["rmse"]),
+                    _fmt(row["mase"]),
+                    _fmt(row["smape"], 2),
+                    f"{row['latency_p50_ms']:.1f}"
+                    if pd.notna(row["latency_p50_ms"])
+                    else "n/a",
+                    f"{row['latency_p95_ms']:.1f}"
+                    if pd.notna(row["latency_p95_ms"])
+                    else "n/a",
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(lines)
+
+
+def _import_pyplot() -> Any:
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError as exc:  # pragma: no cover - dependency is declared
+        raise ReportError(
+            "matplotlib is required for figures; install with "
+            "`pip install -e \".[report]\"`"
+        ) from exc
+    return plt
+
+
+def plot_mase_by_family_horizon(summary: pd.DataFrame, path: Path) -> None:
+    plt = _import_pyplot()
+    models = list(dict.fromkeys(summary["model"]))
+    horizons = list(dict.fromkeys(summary["horizon"].dropna().astype(int)))
+    if not models or not horizons:
+        return
+    width = 0.8 / len(models)
+    x = range(len(horizons))
+    fig, ax = plt.subplots(figsize=(1.9 * len(horizons) + 3.5, 5.0))
+    for index, model in enumerate(models):
+        heights: list[float] = []
+        for horizon in horizons:
+            match = summary[(summary["model"] == model) & (summary["horizon"] == horizon)]
+            heights.append(float(match["mase"].iloc[0]) if not match.empty else 0.0)
+        family = str(summary[summary["model"] == model]["family"].iloc[0])
+        offset = (index - (len(models) - 1) / 2) * width
+        ax.bar(
+            [position + offset for position in x],
+            heights,
+            width=width,
+            label=model,
+            color=_FAMILY_COLOURS.get(family, "#666666"),
+            edgecolor="white",
+            linewidth=0.6,
+        )
+    ax.set_yscale("log")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([str(h) for h in horizons])
+    ax.set_xlabel("forecast horizon (steps)")
+    ax.set_ylabel("seasonal MASE (mean, log scale)")
+    ax.set_title("Seasonal MASE by family and horizon")
+    ax.grid(axis="y", which="both", alpha=0.25, linewidth=0.6)
+    ax.legend(frameon=False, ncols=min(len(models), 5), fontsize=8)
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def plot_accuracy_vs_cost(summary: pd.DataFrame, path: Path) -> None:
+    plt = _import_pyplot()
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    for _, row in summary.iterrows():
+        x = row["mase"]
+        y = row["latency_p50_ms"]
+        if pd.isna(x) or pd.isna(y) or y <= 0:
+            continue
+        colour = _FAMILY_COLOURS.get(str(row["family"]), "#666666")
+        marker = {24: "o", 48: "s", 96: "^", 192: "D"}.get(int(row["horizon"]), "o")
+        ax.scatter(x, y, color=colour, marker=marker, s=70, edgecolor="white", zorder=3)
+        ax.annotate(
+            f"{row['model']} (h{int(row['horizon'])})",
+            (x, y),
+            textcoords="offset points",
+            xytext=(5, 4),
+            fontsize=7,
+            alpha=0.85,
+        )
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("seasonal MASE (mean, lower is better, log scale)")
+    ax.set_ylabel("latency p50 (ms, lower is cheaper, log scale)")
+    ax.set_title("Accuracy vs inference cost")
+    ax.grid(which="both", alpha=0.25, linewidth=0.6)
+    handles = [
+        plt.Line2D([0], [0], marker="o", linestyle="", color=colour, label=family)
+        for family, colour in _FAMILY_COLOURS.items()
+        if family in set(summary["family"])
+    ]
+    if handles:
+        ax.legend(handles=handles, frameon=False, fontsize=8, title="family")
+    fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Regenerate the results summary and figures")
+    parser.add_argument("--results-root", type=Path, default=Path("results"))
+    parser.add_argument("--dataset", default="electricity_hourly")
+    parser.add_argument("--summary", type=Path, default=Path("docs/results_summary.csv"))
+    parser.add_argument("--figures-dir", type=Path, default=Path("docs/figures"))
+    parser.add_argument(
+        "--no-figures", action="store_true", help="write the summary only"
+    )
+    args = parser.parse_args(argv)
+    try:
+        frame, runs = load_runs(args.results_root, dataset=args.dataset or None)
+        summary = summarise(frame)
+    except ReportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    args.summary.parent.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(args.summary, index=False)
+    print(format_markdown(summary))
+    print()
+    print(f"summary: {args.summary} ({len(summary)} rows from {len(runs)} run(s))")
+    if not args.no_figures:
+        try:
+            plot_mase_by_family_horizon(
+                summary, args.figures_dir / "mase_by_family_horizon.png"
+            )
+            plot_accuracy_vs_cost(
+                summary, args.figures_dir / "accuracy_vs_cost.png"
+            )
+        except ReportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"figures: {args.figures_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

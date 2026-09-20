@@ -75,6 +75,7 @@ class ExperimentConfig:
     output_dir: Path
     seed: int | None = None
     season_length: int = 1
+    track_memory: bool = True
     datasets_config: Path = DEFAULT_DATASETS_CONFIG
     split_manifest: Path | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -94,6 +95,11 @@ class ExperimentConfig:
         seed = raw.get("seed")
         if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
             raise RunnerError(f"{source}: 'seed' must be an integer, got {seed!r}")
+        track_memory = raw.get("track_memory", True)
+        if not isinstance(track_memory, bool):
+            raise RunnerError(
+                f"{source}: 'track_memory' must be a boolean, got {track_memory!r}"
+            )
         override = os.environ.get(RESULTS_DIR_ENV)
         output_dir = Path(override or raw.get("output_dir") or DEFAULT_RESULTS_DIR)
         manifest = raw.get("split_manifest") or dataset.get("split_manifest")
@@ -106,6 +112,7 @@ class ExperimentConfig:
             output_dir=output_dir,
             seed=seed,
             season_length=int(raw.get("season_length", 1)),
+            track_memory=track_memory,
             datasets_config=Path(raw.get("datasets_config", DEFAULT_DATASETS_CONFIG)),
             split_manifest=Path(manifest) if manifest else None,
             metadata={k: v for k, v in raw.items() if k not in {"dataset", "models"}},
@@ -406,6 +413,7 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
                 builder,
                 series_id=s.series_id,
                 season_length=experiment.season_length,
+                track_memory=experiment.track_memory,
             )
             all_rows.extend(
                 _rows_for_model(

@@ -948,3 +948,23 @@ def test_cli_reports_invalid_config_without_a_traceback(
     assert "error:" in captured.err
     assert "Traceback" not in captured.err
 
+
+def test_runner_track_memory_false_leaves_peak_mem_empty(tmp_path: Path):
+    """`track_memory: false` skips tracemalloc but still measures latency."""
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[1]
+    smoke = yaml.safe_load(
+        (repo_root / "configs" / "experiments" / "smoke.yaml").read_text(encoding="utf-8")
+    )
+    smoke["track_memory"] = False
+    smoke["output_dir"] = str(tmp_path / "results")
+    config_path = tmp_path / "smoke.yaml"
+    config_path.write_text(yaml.safe_dump(smoke), encoding="utf-8")
+
+    summary = runner.run_experiment(config_path, root=repo_root)
+    with open(summary["results"], newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows
+    assert all(row["peak_mem_mb"] == "" for row in rows)
+    assert all(row["latency_ms"] not in ("", None) for row in rows)

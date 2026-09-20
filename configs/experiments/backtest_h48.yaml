@@ -10,11 +10,11 @@
 # 24-step stride. That yields ~21 origins per series per horizon and keeps a
 # five-family run inside a single sitting; the split boundaries are unchanged
 # and no window reads its target block. The full-stride sweep is a follow-up.
-name: backtest
+name: backtest_h48
 stage: backtest
 description: >-
-  Rolling-origin backtest over 24 electricity series at the primary 24h horizon,
-  with the context length treated as a first-class variable.
+  Rolling-origin backtest over 24 electricity series at the 48h horizon
+  (primary horizon sweep 24/48/96/192), bounded as described in backtest.yaml.
 
 dataset:
   name: electricity_hourly
@@ -27,7 +27,7 @@ split:
   val_frac: 0.2
   test_frac: 0.2
   context_length: 168
-  horizon: 24
+  horizon: 48
   stride: 240
   min_train_size: 168
 
