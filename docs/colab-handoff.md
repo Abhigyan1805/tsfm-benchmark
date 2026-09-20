@@ -262,6 +262,14 @@ python scripts/kaggle_run.py experiments \
     --pip 'timesfm[torch]' --pip chronos-forecasting --timeout 2400
 ```
 
+Pin `--ref` to the branch tip that carries the process-level TSFM backend
+cache (the wrappers cache the loaded checkpoint and the TimesFM compile per
+process); the kernel asserts the clone contains it and refuses to run
+otherwise. The default `$(git rev-parse HEAD)` is only safe when executed on
+that branch, never on `main`. The GPU configs set `warmup: true`, so the
+one-time checkpoint load and compile are primed before the first scored window
+and do not skew its `latency_ms`.
+
 The kernel clones `--repo` at `--ref`, installs the extra packages, fetches and
 checksum-verifies the frozen dataset through `python -m
 tsbench.data.build_catalog --materialize`, runs each pending config with

@@ -53,8 +53,18 @@ def test_gpu_configs_reuse_the_cpu_frozen_windows():
         assert gpu.dataset["split_manifest"] == cpu.dataset["split_manifest"]
         assert gpu.models == GPU_MODELS
         assert gpu.track_memory is True
+        assert gpu.warmup is True
         for model in GPU_MODELS:
             assert gpu.raw["model_configs"][model]["kwargs"]
+
+
+def test_gpu_pilot_measures_one_origin_per_series():
+    pilot = load_experiment(REPO_ROOT / "configs" / "experiments" / "gpu_pilot.yaml")
+    assert pilot.models == GPU_MODELS
+    assert pilot.track_memory is True and pilot.warmup is True
+    assert pilot.split.context_length == 168
+    # A stride larger than the test span leaves one origin per frozen series.
+    assert pilot.split.stride > pilot.split.test_frac * 26304
 
 
 def test_gpu_probe_covers_every_gpu_registry_key_on_the_fixture():

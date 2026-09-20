@@ -138,6 +138,27 @@ def measure_peak_memory(
     return start_window, stop_window
 
 
+def _warm_up(
+    model_builder: Callable[[], Any],
+    horizon: int,
+    context: np.ndarray,
+) -> None:
+    """Fit and predict once, discarding the result, to prime process caches.
+
+    The zero-shot TSFM wrappers load (and TimesFM compiles) their checkpoint on
+    the first prediction; without a warm-up that one-time cost lands in the
+    first scored window's ``latency_ms`` and skews the percentile used by the
+    cost figure. A failure here is ignored: the scored windows record their own
+    errors.
+    """
+    try:
+        model = model_builder()
+        model.fit(np.array(context, dtype=np.float64, copy=True))
+        np.asarray(model.predict(horizon), dtype=np.float64)
+    except Exception:  # noqa: BLE001 - warm-up is best-effort
+        return
+
+
 def backtest_windows(
     values: np.ndarray,
     plan: SplitPlan,
@@ -148,6 +169,7 @@ def backtest_windows(
     metrics_fn: Callable[..., dict[str, float]] = _metrics.metric_set,
     season_length: int = 1,
     track_memory: bool = True,
+    warmup: bool = False,
     model_name: str | None = None,
     family: str | None = None,
 ) -> list[WindowForecast]:
@@ -155,13 +177,17 @@ def backtest_windows(
 
     A failing model on one window is recorded with ``error`` set and does not
     abort the remaining windows; a caller who wants strictness can check
-    :attr:`WindowForecast.ok` on the returned rows.
+    :attr:`WindowForecast.ok` on the returned rows. ``warmup`` primes the
+    model's process caches (e.g. loaded TSFM weights) before the first scored
+    window so one-time setup is not charged to a single row's latency.
     """
     series = np.asarray(values, dtype=np.float64).reshape(-1)
     displayed_name, displayed_family = _resolve_labels(
         model_builder, model_name=model_name, family=family
     )
     windows = iter_windows(series, plan, period=period)
+    if warmup and windows:
+        _warm_up(model_builder, plan.config.horizon, windows[0][1])
     start_memory, stop_memory = measure_peak_memory(enabled=track_memory)
     results: list[WindowForecast] = []
     for index, (origin, context, target) in enumerate(windows):

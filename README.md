@@ -51,9 +51,9 @@ make lint
 | `make data` | fetch and checksum-verify the dataset catalogue (`python -m tsbench.data.build_catalog --materialize`; see `data/manifests/PROVENANCE.md`) |
 | `make backtest` | 24h rolling-origin backtest, all five local families (`configs/experiments/backtest.yaml`); bounded origin stride, see `REPORT.md` |
 | `make horizons` | complete the primary sweep at 48/96/192 on the same frozen boundaries (`configs/experiments/backtest_h{48,96,192}.yaml`) |
-| `make deep` | LSTM / small Transformer run (`configs/experiments/deep.yaml`) |
-| `make tsfm` | TimesFM 2.5 / Chronos-Bolt zero-shot run (`configs/experiments/tsfm.yaml`) |
-| `make report` | aggregate the telemetry store and regenerate `docs/results_summary.csv` + `docs/figures/` (`scripts/make_plots.py`) |
+| `make gpu` | deep LSTM/Transformer + zero-shot TimesFM 2.5/Chronos-Bolt on the CPU families' frozen windows (`configs/experiments/gpu.yaml`; run in a GPU session via `docs/colab-handoff.md`) |
+| `make gpu-horizons` | remaining GPU-tier horizons (`configs/experiments/gpu_h{48,96,192}.yaml`) |
+| `make report` | merge the live `results/` store with the committed `docs/telemetry/` store and regenerate `docs/results_summary.csv` + `docs/figures/` (`scripts/make_plots.py`) |
 | `make licenses` | print the model license manifest from `configs/models.yaml` |
 | `make reproduce` | rerun the documented end-to-end path |
 

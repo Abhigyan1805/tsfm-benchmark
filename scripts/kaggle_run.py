@@ -279,6 +279,18 @@ if PIP_PACKAGES:
 subprocess.run(["git", "clone", "--quiet", REPO, str(REPO_DIR)], check=True)
 subprocess.run(["git", "-C", str(REPO_DIR), "checkout", "--quiet", REF], check=True)
 
+# Assert the cloned ref carries the process-level TSFM backend cache; without it
+# every rolling-origin window reloads the checkpoint (and TimesFM recompiles),
+# wasting hours. Pin --ref to a commit that contains it.
+_cache_source = REPO_DIR / "src" / "tsbench" / "models" / "tsfm" / "timesfm.py"
+if _cache_source.is_file() and "_BACKEND_CACHE" not in _cache_source.read_text(
+    encoding="utf-8"
+):
+    raise SystemExit(
+        "cloned ref lacks the TSFM process-level backend cache; pin --ref to a "
+        "commit that contains it"
+    )
+
 env = dict(os.environ)
 env["PYTHONPATH"] = str(REPO_DIR / "src") + os.pathsep + env.get("PYTHONPATH", "")
 

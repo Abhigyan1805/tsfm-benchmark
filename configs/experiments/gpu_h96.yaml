@@ -34,6 +34,9 @@ subset:
 
 track_memory: true
 
+# Prime process caches before the first scored window (see gpu.yaml).
+warmup: true
+
 models:
   - lstm
   - transformer

@@ -28,6 +28,7 @@ split:
   min_train_size: 5
 
 track_memory: true
+warmup: true
 
 models:
   - lstm

@@ -658,6 +658,30 @@ def test_backtest_reads_model_params_after_fit():
     assert all(outcome.params == 42 for outcome in outcomes)
 
 
+def test_backtest_warmup_primes_caches_without_adding_rows():
+    plan = _plan()
+    values = _series()
+    counter = {"built": 0}
+
+    def builder():
+        counter["built"] += 1
+        return NaiveStub()
+
+    outcomes = backtest_windows(
+        values,
+        plan,
+        builder,
+        series_id="s",
+        model_name="warm",
+        family="tsfm",
+        warmup=True,
+    )
+    expected = len(enumerate_windows(plan, period="test"))
+    assert len(outcomes) == expected
+    # One extra build for the discarded warm-up prediction.
+    assert counter["built"] == expected + 1
+
+
 def test_runner_rejects_split_fractions_that_disagree_with_manifest(tmp_path: Path):
     import pandas as pd
     import yaml

@@ -46,6 +46,11 @@ subset:
 # performed it. Without CUDA it falls back to host tracemalloc.
 track_memory: true
 
+# Prime each model's process caches (TSFM checkpoint load + TimesFM compile)
+# before the first scored window, so the one-time setup is not charged to a
+# single row's latency_ms and the cost percentiles stay clean.
+warmup: true
+
 # Registry keys; entrypoints come from configs/models.yaml. The deep budget and
 # seeds are fixed in `model_configs` below and the run seed is forwarded to the
 # seeded constructors. TSFM weights load zero-shot behind the license gate and

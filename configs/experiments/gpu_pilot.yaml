@@ -1,13 +1,14 @@
-# GPU tier rolling-origin backtest on the primary electricity-demand dataset.
-# See configs/experiments/gpu.yaml for the full protocol note: the deep and
-# zero-shot TSFM families run on the same frozen CPU windows (context 168,
-# bounded stride 240), with the run seed forwarded to the seeded deep models.
-name: gpu_h192
+# GPU timing pilot on the real electricity dataset: one forecast origin per
+# frozen series (stride larger than the test span) across all four GPU-tier
+# models. Run this before the full sweep to confirm the session, measure the
+# per-window cost, and extrapolate the full 24/48/96/192 runtime; a session
+# timeout can then never leave a horizon half-measured. The pilot's run
+# directory must land outside `results/` (pass --out results/kaggle-gpu-pilot)
+# so it is never merged into the committed summary.
+name: gpu_pilot
 stage: gpu
 description: >-
-  Deep + zero-shot TSFM rolling-origin backtest over the 24 electricity series
-  at the 192h horizon (primary sweep 24/48/96/192), on the CPU families' frozen
-  windows.
+  Real-data timing pilot: 24 frozen series x 1 origin x 4 GPU models at h24.
 
 dataset:
   name: electricity_hourly
@@ -20,21 +21,11 @@ split:
   val_frac: 0.2
   test_frac: 0.2
   context_length: 168
-  horizon: 192
-  stride: 240
+  horizon: 24
+  stride: 26304
   min_train_size: 168
 
-subset:
-  series: all 24 frozen evaluation series (T1..T308, evenly spaced)
-  origin_stride: 240
-  origins_per_series_per_horizon: "21-22"
-  note: >-
-    GPU tier, same frozen windows as the CPU backtest. The full-stride
-    (24-step) sweep is a follow-up.
-
 track_memory: true
-
-# Prime process caches before the first scored window (see gpu.yaml).
 warmup: true
 
 models:
