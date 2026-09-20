@@ -302,7 +302,8 @@ tsbench.data.build_catalog --materialize`, runs each pending config with
 `/kaggle/working/<run-name>/results.tar.gz`. The bundle is refreshed after
 **every** config (run dirs live in `/tmp` until bundled), so a config that hits
 the Kaggle runtime limit cannot discard the configs that already completed. A
-config that fails does not stop the rest.
+config that fails does not stop the rest, but a dataset fetch/checksum failure
+aborts the kernel before any config runs.
 
 The generated kernel also resolves `--repo` wherever Kaggle mounted the data
 (`/kaggle/input/<slug>` and the newer `/kaggle/input/datasets/<owner>/<slug>`),

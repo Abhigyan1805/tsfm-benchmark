@@ -51,7 +51,7 @@ README.md            research question, status, make targets
 PLAN.md              this file
 REPORT.md            full write-up, negative results, limitations
 pyproject.toml
-Makefile             smoke | data | backtest | deep | tsfm | report | licenses | reproduce
+Makefile             smoke | data | backtest | horizons | gpu | gpu-horizons | report | licenses | reproduce
 .github/workflows/   CI: ruff + pytest
 configs/
   datasets.yaml      pinned sources + license manifest refs

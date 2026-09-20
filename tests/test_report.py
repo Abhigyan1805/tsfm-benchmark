@@ -1,9 +1,11 @@
 """Integration coverage for the telemetry-store report script.
 
 ``scripts/make_plots.py`` is the executable contract behind ``make report``: it
-reads the run directories under ``results/``, keeps the newest run per
-``config_hash`` (so a re-run replaces its predecessor), collapses rows to one
-summary row per ``(model, family, horizon)``, and regenerates the figures.
+reads the run directories under ``results/`` and ``docs/telemetry/``, owns each
+experiment to the first root that provides it (keeping the newest run per
+``config_hash`` within a root, so a fresh run supersedes its predecessor rather
+than blending with it), collapses rows to one summary row per
+``(model, family, horizon)``, and regenerates the figures.
 These tests drive the script over a synthesised store, so they never need the
 real dataset or network.
 """
