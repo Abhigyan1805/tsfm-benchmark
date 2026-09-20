@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import tarfile
@@ -102,18 +103,55 @@ def test_default_title_slugifies_back_to_the_kernel_slug():
     assert title.replace(" ", "-") == slug
 
 
-def test_experiment_kernel_source_resolves_dataset_mount_layouts():
-    """Kaggle has used both /kaggle/input/<slug> and /kaggle/input/datasets/..."""
+def test_experiment_kernel_source_resolves_dataset_mount_layouts(tmp_path: Path):
+    """A bundle mounted at the newer layout is resolved before ``git clone``."""
+    from unittest import mock
+
     kaggle = _load_kaggle()
+    requested = "/kaggle/input/tsbench-repo-snapshot/tsbench-repo.bundle"
+    bundle = (
+        tmp_path
+        / "kaggle_input"
+        / "datasets"
+        / "owner"
+        / "snapshot"
+        / "tsbench-repo.bundle"
+    )
+    bundle.parent.mkdir(parents=True)
+    bundle.write_bytes(b"bundle")
     source = kaggle.experiment_kernel_source(
         ["configs/experiments/gpu.yaml"],
-        repo="/kaggle/input/datasets/owner/snapshot/repo.bundle",
+        repo=requested,
         ref="deadbeef",
         run_name="run-1",
         pip_packages=[],
     )
-    assert 'Path("/kaggle/input").rglob' in source
-    assert "resolved REPO to" in source
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append([str(part) for part in cmd])
+        return subprocess.CompletedProcess(cmd, 0)
+
+    original_path = pathlib.Path
+
+    def mounted(*args, **kwargs):
+        path = original_path(*args, **kwargs)
+        text = str(path)
+        if text == "/kaggle/input" or text.startswith("/kaggle/input/"):
+            relative = text[len("/kaggle/input") :].lstrip("/")
+            return tmp_path / "kaggle_input" / relative
+        return path
+
+    namespace: dict = {}
+    with mock.patch.dict(os.environ, {"TSBENCH_KAGGLE_WORKING": str(tmp_path)}):
+        with mock.patch.object(subprocess, "run", side_effect=fake_run):
+            with mock.patch.object(pathlib, "Path", mounted):
+                exec(compile(source, "kernel.py", "exec"), namespace)
+
+    clone = [call for call in calls if call[1:3] == ["clone", "--quiet"]]
+    assert len(clone) == 1
+    assert clone[0][3] == str(bundle)
+    assert requested not in clone[0]
 
 
 
@@ -184,6 +222,39 @@ def test_experiment_kernel_source_runs_each_config(tmp_path: Path):
     for call, config in zip(run_calls, configs, strict=True):
         assert call[5] == config
     assert (tmp_path / "run-1" / "results.tar.gz").is_file()
+
+
+def test_experiment_kernel_materialize_failure_is_fatal(tmp_path: Path):
+    """A dataset fetch/checksum failure must fail closed, not run configs."""
+    from unittest import mock
+
+    import pytest
+
+    kaggle = _load_kaggle()
+    source = kaggle.experiment_kernel_source(
+        ["configs/experiments/gpu.yaml"],
+        repo="https://example.invalid/repo.git",
+        ref="deadbeef",
+        run_name="run-1",
+        pip_packages=[],
+        dataset="electricity_hourly",
+    )
+    runs: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        call = [str(part) for part in cmd]
+        runs.append(call)
+        if "build_catalog" in " ".join(call):
+            raise subprocess.CalledProcessError(2, cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    with mock.patch.dict(os.environ, {"TSBENCH_KAGGLE_WORKING": str(tmp_path)}):
+        with mock.patch.object(subprocess, "run", side_effect=fake_run):
+            with pytest.raises(SystemExit) as excinfo:
+                exec(compile(source, "kernel.py", "exec"), {})
+
+    assert "electricity_hourly" in str(excinfo.value)
+    assert not any(call[1:3] == ["-m", "tsbench"] for call in runs)
 
 
 def test_extract_experiment_results_restores_run_dirs(tmp_path: Path):

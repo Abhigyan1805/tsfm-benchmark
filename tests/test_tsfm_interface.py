@@ -198,16 +198,16 @@ class BackendCacheTests(unittest.TestCase):
     """The rolling-origin backtest must not reload weights per window."""
 
     def setUp(self) -> None:
-        from tsbench.models.tsfm import timesfm as timesfm_module
+        from tsbench.models.tsfm import clear_backend_caches
 
-        timesfm_module.clear_backend_cache()
+        clear_backend_caches()
 
     def tearDown(self) -> None:
         import sys
 
-        from tsbench.models.tsfm import timesfm as timesfm_module
+        from tsbench.models.tsfm import clear_backend_caches
 
-        timesfm_module.clear_backend_cache()
+        clear_backend_caches()
         sys.modules.pop("timesfm", None)
 
     def test_timesfm_checkpoint_is_loaded_and_compiled_once(self) -> None:
@@ -242,6 +242,63 @@ class BackendCacheTests(unittest.TestCase):
 
         self.assertEqual(calls["loads"], 1)
         self.assertEqual(calls["compiles"], 1)
+
+    def test_clear_backend_caches_resets_every_backend(self) -> None:
+        import sys
+        import types
+
+        from tsbench.models.tsfm import clear_backend_caches
+
+        loads = {"timesfm": 0, "chronos": 0}
+
+        class FakeTimesFMBackend:
+            def compile(self, config):
+                pass
+
+            def forecast(self, horizon, inputs):
+                return [[float(index) for index in range(horizon)]], None
+
+        class FakeTimesFMModel:
+            @staticmethod
+            def from_pretrained(*args, **kwargs):
+                loads["timesfm"] += 1
+                return FakeTimesFMBackend()
+
+        timesfm_module = types.ModuleType("timesfm")
+        timesfm_module.TimesFM_2p5_200M_torch = FakeTimesFMModel
+        timesfm_module.ForecastConfig = lambda **kwargs: dict(kwargs)
+
+        class FakeChronosPipeline:
+            @classmethod
+            def from_pretrained(cls, *args, **kwargs):
+                loads["chronos"] += 1
+                return cls()
+
+            def predict(self, inputs, prediction_length=None):
+                return [[[float(q)] * prediction_length for q in range(3)]]
+
+        chronos_module = types.ModuleType("chronos")
+        chronos_module.ChronosBoltPipeline = FakeChronosPipeline
+
+        fake_torch = types.ModuleType("torch")
+        fake_torch.float32 = "float32"
+        fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        fake_torch.tensor = lambda values, dtype=None: list(values)
+
+        with mock.patch.dict(
+            sys.modules,
+            {"timesfm": timesfm_module, "chronos": chronos_module, "torch": fake_torch},
+        ):
+            with mock.patch.dict(os.environ, {DOWNLOAD_ENV: "1"}):
+                TimesFM25().fit(_sine()).predict(2)
+                ChronosBolt().fit(_sine()).predict(2)
+                self.assertEqual(loads, {"timesfm": 1, "chronos": 1})
+
+                clear_backend_caches()
+
+                TimesFM25().fit(_sine()).predict(2)
+                ChronosBolt().fit(_sine()).predict(2)
+                self.assertEqual(loads, {"timesfm": 2, "chronos": 2})
 
 
 class OutputConversionTests(unittest.TestCase):

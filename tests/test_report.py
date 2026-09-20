@@ -142,6 +142,21 @@ def test_make_plots_refuses_to_average_distinct_configs_at_the_same_horizon(
     assert "ambiguous" in proc.stderr
     assert "Traceback" not in proc.stderr
 
+    first_hash = RunContext.create(
+        "backtest",
+        {"name": "backtest", "horizon": 24},
+        run_id="20240101T000000Z-backtest",
+        cwd=root,
+    ).config_sha
+    second_hash = RunContext.create(
+        "backtest_full",
+        {"name": "backtest_full", "horizon": 24, "stride": 24},
+        run_id="20240102T000000Z-full",
+        cwd=root,
+    ).config_sha
+    assert first_hash in proc.stderr
+    assert second_hash in proc.stderr
+
     with open(summary_path, newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
     assert [row["model"] for row in rows] == ["naive"]
@@ -293,6 +308,46 @@ def test_make_plots_recurses_into_tiered_telemetry(tmp_path: Path):
     with open(summary_path, newline="", encoding="utf-8") as handle:
         by_model = {row["model"]: row for row in csv.DictReader(handle)}
     assert set(by_model) == {"naive", "timesfm25"}
+
+
+def test_make_plots_prefers_the_live_root_over_stale_telemetry(tmp_path: Path):
+    """A fresh run supersedes a committed telemetry copy of the same rows."""
+    root = tmp_path / "results"
+    _write_run(
+        root,
+        "20240201T000000Z-backtest",
+        {"name": "backtest", "horizon": 24, "stride": 240},
+        [("naive", "baseline", 24, 2.0, 0.2)],
+    )
+    telemetry = tmp_path / "telemetry"
+    _write_run(
+        telemetry / "cpu",
+        "20240101T000000Z-backtest",
+        {"name": "backtest", "horizon": 24, "stride": 240, "note": "old"},
+        [("naive", "baseline", 24, 100.0, 0.1)],
+    )
+    _write_run(
+        telemetry / "gpu",
+        "20240102T000000Z-gpu",
+        {"name": "gpu", "horizon": 24},
+        [("timesfm25", "tsfm", 24, 90.0, 30.0)],
+    )
+    summary_path = tmp_path / "summary.csv"
+    proc = _run_script(
+        root,
+        summary_path,
+        tmp_path / "figures",
+        "--no-figures",
+        "--telemetry-root",
+        str(telemetry),
+    )
+    assert proc.returncode == 0, proc.stderr
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        by_model = {row["model"]: row for row in csv.DictReader(handle)}
+    assert set(by_model) == {"naive", "timesfm25"}
+    assert float(by_model["naive"]["mae"]) == pytest.approx(2.0)
+    assert int(by_model["naive"]["n_windows"]) == 1
+    assert float(by_model["timesfm25"]["mae"]) == pytest.approx(90.0)
 
 
 @pytest.mark.skipif(

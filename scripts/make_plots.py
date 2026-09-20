@@ -17,6 +17,9 @@ summary row per ``(model, family, horizon)``, and writes:
 Several runs may cover the same dataset (for example a horizon sweep, or a
 re-run after a fix). Each run carries a ``config_hash``; only the newest run per
 hash is used so a re-run replaces rather than double-counts its predecessor.
+Roots are ordered by precedence: each experiment is owned by the first root
+that provides it, so a fresh ``results/`` run supersedes the committed telemetry
+copy of the same experiment instead of blending two config hashes for it.
 
 Examples::
 
@@ -114,53 +117,71 @@ def _read_runs(
     return found
 
 
+def _experiment(metadata: dict[str, Any], run_dir: Path) -> str:
+    """The experiment identity that owns a run's rows across roots."""
+    return str(metadata.get("experiment") or run_dir.name)
+
+
 def load_runs(
     roots: str | Path | Sequence[str | Path], *, dataset: str | None = None
 ) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
     """Load runs from every root, keeping the newest per ``config_hash``.
 
-    ``roots`` may be a single path or a sequence; missing roots are skipped so
-    a checkout without a live run directory can still regenerate the summary
-    from the committed telemetry alone.
+    ``roots`` is ordered by precedence; each experiment is owned by the first
+    root that provides it, so a fresh ``results/`` run supersedes the committed
+    telemetry copy of the same-experiment run instead of being merged with it
+    (two config hashes for one experiment never blend). If different
+    experiments still disagree on a summary row, :func:`summarise` fails loudly.
+    ``roots`` may be a single path or a sequence; missing roots are skipped so a
+    checkout without a live run directory can still regenerate the summary from
+    the committed telemetry alone.
     """
     if isinstance(roots, (str, Path)):
         roots = [roots]
-    candidates: list[tuple[Path, dict[str, Any], pd.DataFrame]] = []
+    frames: list[pd.DataFrame] = []
+    runs: list[dict[str, Any]] = []
+    claimed: set[str] = set()
     for root in roots:
         directory = Path(root)
         if not directory.is_dir():
             continue
-        candidates.extend(_read_runs(directory, dataset=dataset))
-    if not candidates:
+        newest: dict[str, tuple[Path, dict[str, Any], pd.DataFrame]] = {}
+        for run_dir, metadata, frame in _read_runs(directory, dataset=dataset):
+            config_hash = str(metadata.get("config_hash") or run_dir.name)
+            previous = newest.get(config_hash)
+            if previous is None or run_dir.name > previous[0].name:
+                newest[config_hash] = (run_dir, metadata, frame)
+        root_experiments: set[str] = set()
+        for run_dir, metadata, frame in sorted(
+            newest.values(), key=lambda item: item[0].name
+        ):
+            experiment = _experiment(metadata, run_dir)
+            if experiment in claimed:
+                continue
+            frame = frame.copy()
+            frame["_run_id"] = run_dir.name
+            frame["_git_sha"] = str(metadata.get("git_sha", "") or "")
+            frame["_config_hash"] = str(metadata.get("config_hash", "") or "")
+            frame["_root"] = str(directory)
+            frames.append(frame)
+            runs.append(
+                {
+                    "run_id": run_dir.name,
+                    "experiment": metadata.get("experiment"),
+                    "config_hash": metadata.get("config_hash"),
+                    "git_sha": metadata.get("git_sha"),
+                    "root": str(directory),
+                    "n_rows": int(len(frame)),
+                }
+            )
+            root_experiments.add(experiment)
+        claimed.update(root_experiments)
+    if not frames:
         listed = ", ".join(str(Path(r)) for r in roots)
         raise ReportError(
             f"no usable results under {listed}"
             + (f" for dataset {dataset!r}" if dataset else "")
             + "; run `make backtest` first, or add a telemetry root"
-        )
-
-    newest: dict[str, tuple[Path, dict[str, Any], pd.DataFrame]] = {}
-    for directory, metadata, frame in candidates:
-        config_hash = str(metadata.get("config_hash") or directory.name)
-        previous = newest.get(config_hash)
-        if previous is None or directory.name > previous[0].name:
-            newest[config_hash] = (directory, metadata, frame)
-
-    frames: list[pd.DataFrame] = []
-    runs: list[dict[str, Any]] = []
-    for directory, metadata, frame in sorted(newest.values(), key=lambda item: item[0].name):
-        frame = frame.copy()
-        frame["_run_id"] = directory.name
-        frame["_git_sha"] = str(metadata.get("git_sha", "") or "")
-        frames.append(frame)
-        runs.append(
-            {
-                "run_id": directory.name,
-                "experiment": metadata.get("experiment"),
-                "config_hash": metadata.get("config_hash"),
-                "git_sha": metadata.get("git_sha"),
-                "n_rows": int(len(frame)),
-            }
         )
     return pd.concat(frames, ignore_index=True), runs
 
@@ -214,11 +235,24 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
         dataset, horizon, family, model, context_length = key
         run_ids = sorted(set(identity.loc[group.index]))
         if len(run_ids) > 1:
+            detail = (
+                f"{model!r} ({family}) at horizon {horizon} appears in multiple "
+                f"runs ({', '.join(run_ids)})"
+            )
+            if "_config_hash" in work:
+                hashes = sorted(
+                    {str(value) for value in work["_config_hash"].loc[group.index]}
+                )
+                detail += f" with config hashes {hashes}"
+            if "_root" in work:
+                roots = sorted(
+                    {str(value) for value in work["_root"].loc[group.index]}
+                )
+                detail += f" under roots {roots}"
             raise ReportError(
-                f"ambiguous results: {model!r} ({family}) at horizon {horizon} "
-                f"appears in multiple runs ({', '.join(run_ids)}); remove the stale "
-                "run or scope --results-root to one config set so distinct configs "
-                "are not averaged"
+                f"ambiguous results: {detail}; remove the stale run or scope "
+                "--results-root to one config set so distinct configs are not "
+                "averaged"
             )
         scored = int(group["mae"].notna().sum())
         rows.append(
