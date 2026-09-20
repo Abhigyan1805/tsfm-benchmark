@@ -132,7 +132,7 @@ def test_experiment_kernel_source_resolves_dataset_mount_layouts(tmp_path: Path)
         calls.append([str(part) for part in cmd])
         return subprocess.CompletedProcess(cmd, 0)
 
-    original_path = pathlib.Path
+    original_path = type(pathlib.Path())
 
     def mounted(*args, **kwargs):
         path = original_path(*args, **kwargs)
