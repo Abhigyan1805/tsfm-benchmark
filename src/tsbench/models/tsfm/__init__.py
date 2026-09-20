@@ -117,6 +117,15 @@ def download_allowed() -> bool:
     return os.environ.get(DOWNLOAD_ENV) == "1"
 
 
+def clear_backend_caches() -> None:
+    """Drop every process-level TSFM backend/compile cache."""
+    from tsbench.models.tsfm.chronos import clear_backend_cache as _chronos
+    from tsbench.models.tsfm.timesfm import clear_backend_cache as _timesfm
+
+    _chronos()
+    _timesfm()
+
+
 def require_weights_allowed(model_id: str, weights: VerifiedWeights) -> None:
     """Enforce the license gate, then the download opt-in, before loading."""
     if weights.license not in PERMISSIVE_LICENSES:
@@ -215,6 +224,7 @@ __all__ = [
     "as_float_array",
     "check_chronos_model_id",
     "check_timesfm_model_id",
+    "clear_backend_caches",
     "download_allowed",
     "flatten_floats",
     "median_point",

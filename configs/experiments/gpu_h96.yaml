@@ -1,0 +1,73 @@
+# GPU tier rolling-origin backtest on the primary electricity-demand dataset.
+# See configs/experiments/gpu.yaml for the full protocol note: the deep and
+# zero-shot TSFM families run on the same frozen CPU windows (context 168,
+# bounded stride 240), with the run seed forwarded to the seeded deep models.
+name: gpu_h96
+stage: gpu
+description: >-
+  Deep + zero-shot TSFM rolling-origin backtest over the 24 electricity series
+  at the 96h horizon (primary sweep 24/48/96/192), on the CPU families' frozen
+  windows.
+
+dataset:
+  name: electricity_hourly
+  loader: monash_tsf
+  max_series: null
+  split_manifest: data/manifests/electricity_hourly_split_manifest.json
+
+split:
+  train_frac: 0.6
+  val_frac: 0.2
+  test_frac: 0.2
+  context_length: 168
+  horizon: 96
+  stride: 240
+  min_train_size: 168
+
+subset:
+  series: all 24 frozen evaluation series (T1..T308, evenly spaced)
+  origin_stride: 240
+  origins_per_series_per_horizon: "21-22"
+  note: >-
+    GPU tier, same frozen windows as the CPU backtest. The full-stride
+    (24-step) sweep is a follow-up.
+
+track_memory: true
+
+models:
+  - lstm
+  - transformer
+  - timesfm25
+  - chronos_bolt
+
+model_configs:
+  lstm:
+    kwargs:
+      context: 32
+      hidden: 32
+      layers: 1
+      epochs: 50
+      lr: 0.01
+      batch_size: 64
+  transformer:
+    kwargs:
+      context: 32
+      hidden: 32
+      layers: 2
+      heads: 4
+      feedforward: 64
+      max_horizon: 32
+      epochs: 50
+      lr: 0.01
+      batch_size: 64
+  timesfm25:
+    kwargs:
+      max_context: 512
+      max_horizon: 128
+  chronos_bolt:
+    kwargs:
+      max_context: 512
+
+season_length: 24
+seed: 20240919
+output_dir: results

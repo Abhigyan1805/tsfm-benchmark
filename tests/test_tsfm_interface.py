@@ -194,6 +194,56 @@ def _values(result) -> list[float]:
     return [float(value) for value in result]
 
 
+class BackendCacheTests(unittest.TestCase):
+    """The rolling-origin backtest must not reload weights per window."""
+
+    def setUp(self) -> None:
+        from tsbench.models.tsfm import timesfm as timesfm_module
+
+        timesfm_module.clear_backend_cache()
+
+    def tearDown(self) -> None:
+        import sys
+
+        from tsbench.models.tsfm import timesfm as timesfm_module
+
+        timesfm_module.clear_backend_cache()
+        sys.modules.pop("timesfm", None)
+
+    def test_timesfm_checkpoint_is_loaded_and_compiled_once(self) -> None:
+        import sys
+        import types
+
+        calls = {"loads": 0, "compiles": 0}
+
+        class FakeBackend:
+            def compile(self, config):
+                calls["compiles"] += 1
+
+            def forecast(self, horizon, inputs):
+                return [[float(index) for index in range(horizon)]], None
+
+        class FakeTimesFM:
+            @staticmethod
+            def from_pretrained(*args, **kwargs):
+                calls["loads"] += 1
+                return FakeBackend()
+
+        module = types.ModuleType("timesfm")
+        module.TimesFM_2p5_200M_torch = FakeTimesFM
+        module.ForecastConfig = lambda **kwargs: dict(kwargs)
+        sys.modules["timesfm"] = module
+
+        with mock.patch.dict(os.environ, {DOWNLOAD_ENV: "1"}):
+            first = TimesFM25().fit(_sine())
+            first.predict(6)
+            second = TimesFM25().fit(_sine())
+            second.predict(6)
+
+        self.assertEqual(calls["loads"], 1)
+        self.assertEqual(calls["compiles"], 1)
+
+
 class OutputConversionTests(unittest.TestCase):
     def test_flatten_floats(self) -> None:
         self.assertEqual(flatten_floats([[1, 2], [3]]), [1.0, 2.0, 3.0])

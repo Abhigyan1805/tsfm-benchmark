@@ -1,26 +1,27 @@
 #!/usr/bin/env python3
-"""Aggregate the telemetry store and regenerate the results figures.
+"""Aggregate the telemetry stores and regenerate the results figures.
 
-The evaluation runner writes one directory per run under ``results/``::
+The evaluation runner writes one directory per run::
 
-    results/<run_id>/results.csv    one row per (series, model, window)
-    results/<run_id>/run.json       provenance (git sha, config hash, split)
+    <root>/<run_id>/results.csv    one row per (series, model, window)
+    <root>/<run_id>/run.json       provenance (git sha, config hash, split)
 
-This script reads that store, collapses it to one summary row per
-``(model, family, horizon)``, and writes:
+This script reads the live ``results/`` store plus the committed
+``docs/telemetry/`` store (both runs, CPU and GPU), collapses the union to one
+summary row per ``(model, family, horizon)``, and writes:
 
 * ``docs/results_summary.csv`` -- the committed machine-readable summary;
 * ``docs/figures/mase_by_family_horizon.png`` -- accuracy per family per horizon;
 * ``docs/figures/accuracy_vs_cost.png`` -- the accuracy/cost scatter.
 
-Several runs may cover the same dataset (for example a horizon sweep). Each run
-carries a ``config_hash``; only the newest run per hash is used so a re-run
-replaces rather than double-counts its predecessor.
+Several runs may cover the same dataset (for example a horizon sweep, or a
+re-run after a fix). Each run carries a ``config_hash``; only the newest run per
+hash is used so a re-run replaces rather than double-counts its predecessor.
 
 Examples::
 
     python scripts/make_plots.py
-    python scripts/make_plots.py --results-root results --dataset electricity_hourly
+    python scripts/make_plots.py --results-root results --telemetry-root docs/telemetry
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +49,10 @@ SUMMARY_COLUMNS = [
     "smape",
     "latency_p50_ms",
     "latency_p95_ms",
+    "peak_mem_mb",
     "train_seconds",
+    "params",
+    "zero_shot",
 ]
 
 # Colour-blind-friendly qualitative palette, stable per family.
@@ -70,14 +75,19 @@ def _numeric(frame: pd.DataFrame, column: str) -> pd.Series:
     return pd.to_numeric(frame[column].replace("", None), errors="coerce")
 
 
-def load_runs(
-    root: str | Path, *, dataset: str | None = None
-) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
-    """Load every run under ``root``, keeping the newest per ``config_hash``."""
-    root = Path(root)
-    if not root.is_dir():
-        raise ReportError(f"results root not found: {root}")
-    candidates: list[tuple[Path, dict[str, Any]]] = []
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value == value:
+        return value != 0
+    return str(value).strip().lower() in {"true", "1", "yes"}
+
+
+def _read_runs(
+    root: Path, *, dataset: str | None
+) -> list[tuple[Path, dict[str, Any], pd.DataFrame]]:
+    """Read every run directory under one root (no dedupe yet)."""
+    found: list[tuple[Path, dict[str, Any], pd.DataFrame]] = []
     for directory in sorted(root.iterdir()):
         csv_path = directory / "results.csv"
         if not directory.is_dir() or not csv_path.is_file():
@@ -89,26 +99,53 @@ def load_runs(
                 metadata = json.loads(run_json.read_text(encoding="utf-8"))
             except json.JSONDecodeError as exc:
                 print(f"warning: ignoring {run_json}: {exc}", file=sys.stderr)
-        metadata["_dir"] = directory
-        candidates.append((directory, metadata))
-
-    newest: dict[str, tuple[Path, dict[str, Any]]] = {}
-    for directory, metadata in candidates:
-        config_hash = str(metadata.get("config_hash") or directory.name)
-        previous = newest.get(config_hash)
-        if previous is None or directory.name > previous[0].name:
-            newest[config_hash] = (directory, metadata)
-
-    frames: list[pd.DataFrame] = []
-    runs: list[dict[str, Any]] = []
-    for directory, metadata in sorted(newest.values(), key=lambda item: item[0].name):
-        frame = pd.read_csv(directory / "results.csv")
+        frame = pd.read_csv(csv_path)
         if frame.empty:
             continue
         if dataset is not None and "dataset" in frame:
             frame = frame[frame["dataset"] == dataset]
         if frame.empty:
             continue
+        metadata["_dir"] = directory
+        found.append((directory, metadata, frame))
+    return found
+
+
+def load_runs(
+    roots: str | Path | Sequence[str | Path], *, dataset: str | None = None
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    """Load runs from every root, keeping the newest per ``config_hash``.
+
+    ``roots`` may be a single path or a sequence; missing roots are skipped so
+    a checkout without a live run directory can still regenerate the summary
+    from the committed telemetry alone.
+    """
+    if isinstance(roots, (str, Path)):
+        roots = [roots]
+    candidates: list[tuple[Path, dict[str, Any], pd.DataFrame]] = []
+    for root in roots:
+        directory = Path(root)
+        if not directory.is_dir():
+            continue
+        candidates.extend(_read_runs(directory, dataset=dataset))
+    if not candidates:
+        listed = ", ".join(str(Path(r)) for r in roots)
+        raise ReportError(
+            f"no usable results under {listed}"
+            + (f" for dataset {dataset!r}" if dataset else "")
+            + "; run `make backtest` first, or add a telemetry root"
+        )
+
+    newest: dict[str, tuple[Path, dict[str, Any], pd.DataFrame]] = {}
+    for directory, metadata, frame in candidates:
+        config_hash = str(metadata.get("config_hash") or directory.name)
+        previous = newest.get(config_hash)
+        if previous is None or directory.name > previous[0].name:
+            newest[config_hash] = (directory, metadata, frame)
+
+    frames: list[pd.DataFrame] = []
+    runs: list[dict[str, Any]] = []
+    for directory, metadata, frame in sorted(newest.values(), key=lambda item: item[0].name):
         frame = frame.copy()
         frame["_run_id"] = directory.name
         frame["_git_sha"] = str(metadata.get("git_sha", "") or "")
@@ -122,12 +159,6 @@ def load_runs(
                 "n_rows": int(len(frame)),
             }
         )
-    if not frames:
-        raise ReportError(
-            f"no usable results under {root}"
-            + (f" for dataset {dataset!r}" if dataset else "")
-            + "; run `make backtest` first"
-        )
     return pd.concat(frames, ignore_index=True), runs
 
 
@@ -140,7 +171,15 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
     silently would double-count windows, so that overlap is a hard error.
     """
     work = frame.copy()
-    for column in ("mae", "rmse", "mase", "smape", "latency_ms", "train_seconds"):
+    for column in (
+        "mae",
+        "rmse",
+        "mase",
+        "smape",
+        "latency_ms",
+        "train_seconds",
+        "peak_mem_mb",
+    ):
         work[column] = _numeric(work, column)
     work["horizon"] = pd.to_numeric(work["horizon"], errors="coerce").astype("Int64")
     work["context_length"] = pd.to_numeric(
@@ -155,6 +194,17 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
         clean = series.dropna()
         return float(clean.quantile(q)) if not clean.empty else float("nan")
 
+    def _first_present(series: pd.Series) -> Any:
+        for value in series:
+            if value is None:
+                continue
+            if isinstance(value, float) and value != value:
+                continue
+            if str(value).strip() == "":
+                continue
+            return value
+        return None
+
     rows: list[dict[str, Any]] = []
     keys = ["dataset", "horizon", "family", "model", "context_length"]
     for key, group in work.groupby(keys, dropna=False):
@@ -167,6 +217,7 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
                 "run or scope --results-root to one config set so distinct configs "
                 "are not averaged"
             )
+        scored = int(group["mae"].notna().sum())
         rows.append(
             {
                 "dataset": dataset,
@@ -174,7 +225,7 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
                 "family": family,
                 "model": model,
                 "context_length": int(context_length) if pd.notna(context_length) else None,
-                "n_windows": int(len(group)),
+                "n_windows": scored,
                 "n_series": int(group["series_id"].nunique()),
                 "mae": float(group["mae"].mean()),
                 "rmse": float(group["rmse"].mean()),
@@ -182,7 +233,16 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
                 "smape": float(group["smape"].mean()),
                 "latency_p50_ms": _percentile(group["latency_ms"], 0.5),
                 "latency_p95_ms": _percentile(group["latency_ms"], 0.95),
+                "peak_mem_mb": float(group["peak_mem_mb"].max())
+                if group["peak_mem_mb"].notna().any()
+                else float("nan"),
                 "train_seconds": _percentile(group["train_seconds"], 0.5),
+                "params": _first_present(group["params"])
+                if "params" in group
+                else None,
+                "zero_shot": any(_truthy(value) for value in group["zero_shot"])
+                if "zero_shot" in group
+                else False,
             }
         )
     summary = pd.DataFrame(rows, columns=SUMMARY_COLUMNS)
@@ -204,12 +264,26 @@ def format_markdown(summary: pd.DataFrame) -> str:
         "sMAPE",
         "latency p50 (ms)",
         "latency p95 (ms)",
+        "peak mem (MB)",
+        "train (s)",
+        "params",
+        "0-shot",
     ]
 
     def _fmt(value: Any, digits: int = 4) -> str:
         if value is None or (isinstance(value, float) and value != value):
             return "n/a"
         return f"{float(value):.{digits}f}"
+
+    def _fmt_optional(value: Any, digits: int = 4) -> str:
+        if value is None or (isinstance(value, float) and value != value):
+            return "-"
+        if isinstance(value, bool):
+            return "yes" if value else "no"
+        try:
+            return f"{float(value):.{digits}f}"
+        except (TypeError, ValueError):
+            return str(value)
 
     lines = [
         "| " + " | ".join(headers) + " |",
@@ -233,6 +307,10 @@ def format_markdown(summary: pd.DataFrame) -> str:
                     f"{row['latency_p95_ms']:.1f}"
                     if pd.notna(row["latency_p95_ms"])
                     else "n/a",
+                    _fmt_optional(row.get("peak_mem_mb")),
+                    _fmt_optional(row.get("train_seconds"), 3),
+                    _fmt_optional(row.get("params"), 0),
+                    _fmt_optional(row.get("zero_shot")),
                 ]
             )
             + " |"
@@ -334,6 +412,12 @@ def plot_accuracy_vs_cost(summary: pd.DataFrame, path: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Regenerate the results summary and figures")
     parser.add_argument("--results-root", type=Path, default=Path("results"))
+    parser.add_argument(
+        "--telemetry-root",
+        type=Path,
+        default=Path("docs/telemetry"),
+        help="committed telemetry store, merged with --results-root",
+    )
     parser.add_argument("--dataset", default="electricity_hourly")
     parser.add_argument("--summary", type=Path, default=Path("docs/results_summary.csv"))
     parser.add_argument("--figures-dir", type=Path, default=Path("docs/figures"))
@@ -341,8 +425,9 @@ def main(argv: list[str] | None = None) -> int:
         "--no-figures", action="store_true", help="write the summary only"
     )
     args = parser.parse_args(argv)
+    roots = [args.results_root, args.telemetry_root]
     try:
-        frame, runs = load_runs(args.results_root, dataset=args.dataset or None)
+        frame, runs = load_runs(roots, dataset=args.dataset or None)
         summary = summarise(frame)
     except ReportError as exc:
         print(f"error: {exc}", file=sys.stderr)

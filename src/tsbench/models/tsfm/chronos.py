@@ -18,9 +18,19 @@ from tsbench.models.tsfm import (
     require_weights_allowed,
 )
 
-__all__ = ["ChronosBolt"]
+__all__ = ["ChronosBolt", "clear_backend_cache"]
 
 DEFAULT_MODEL_ID = "amazon/chronos-bolt-base"
+
+# Process-level cache keyed by pinned checkpoint: the rolling-origin backtest
+# builds a fresh model per window, so the loaded pipeline must be shared or the
+# checkpoint would be reloaded for every one of hundreds of windows.
+_BACKEND_CACHE: dict[tuple[str, str], Any] = {}
+
+
+def clear_backend_cache() -> None:
+    """Drop the process-level Chronos-Bolt pipeline cache."""
+    _BACKEND_CACHE.clear()
 
 
 def _load_pipeline_class() -> Any:
@@ -87,6 +97,11 @@ class ChronosBolt(Forecaster):
     def _ensure_backend(self) -> Any:
         if self._backend is not None:
             return self._backend
+        key = (self.model_id, self.revision)
+        cached = _BACKEND_CACHE.get(key)
+        if cached is not None:
+            self._backend = cached
+            return self._backend
         weights = CHRONOS_VERIFIED[self.model_id]
         require_weights_allowed(self.model_id, weights)
         pipeline_class = _load_pipeline_class()
@@ -104,6 +119,7 @@ class ChronosBolt(Forecaster):
             device_map=device,
             torch_dtype=torch.float32,
         )
+        _BACKEND_CACHE[key] = self._backend
         return self._backend
 
     def fit(self, y: Sequence[float] | Any, **kwargs: Any) -> ChronosBolt:

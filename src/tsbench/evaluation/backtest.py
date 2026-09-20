@@ -70,19 +70,58 @@ class WindowForecast:
         return self.error is None
 
 
+def _cuda_meter() -> Any | None:
+    """Return the torch module when a CUDA device is live, else ``None``.
+
+    Peak memory is the GPU allocator's peak on a GPU host and the host
+    ``tracemalloc`` peak otherwise. Importing torch is deferred so a CPU-only
+    or torch-free worker never pays for it.
+    """
+    try:
+        import torch
+    except ImportError:
+        return None
+    cuda = getattr(torch, "cuda", None)
+    if cuda is None or not cuda.is_available():
+        return None
+    return torch
+
+
+def _cuda_peak_memory(torch: Any) -> tuple[Callable[[], None], Callable[[], float | None]]:
+    """Per-window CUDA allocator peak, baselined on live allocations."""
+    state = {"baseline": 0}
+
+    def start_window() -> None:
+        torch.cuda.synchronize()
+        state["baseline"] = torch.cuda.memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
+
+    def stop_window() -> float | None:
+        torch.cuda.synchronize()
+        peak = torch.cuda.max_memory_allocated()
+        return max(0.0, (peak - state["baseline"]) / (1024 * 1024))
+
+    return start_window, stop_window
+
+
 def measure_peak_memory(
     *, enabled: bool = True
 ) -> tuple[Callable[[], None], Callable[[], float | None]]:
     """Start peak-memory tracking; return ``(start_window, stop_window)``.
 
-    ``tracemalloc`` is process-global and its peak accumulates since tracing
-    started, so a single global peak would smear the largest window across every
-    later row. ``start_window`` re-baselines and resets the peak; ``stop_window``
-    returns megabytes allocated at peak since that call. When disabled, both
+    On a CUDA host the measured peak is the GPU allocator's live-allocation
+    peak, re-baselined for every window (so one-time weight loading is charged
+    only to the window that performed it). Without CUDA the host
+    ``tracemalloc`` peak is used; it is process-global and accumulates since
+    tracing started, so ``start_window`` re-baselines and resets it rather than
+    smearing the largest window across every later row. When disabled, both
     halves are no-ops and no overhead is paid.
     """
     if not enabled:
         return (lambda: None), (lambda: None)
+    torch = _cuda_meter()
+    if torch is not None:
+        return _cuda_peak_memory(torch)
     if not tracemalloc.is_tracing():
         tracemalloc.start()
     baseline_mb = tracemalloc.get_traced_memory()[0] / (1024 * 1024)
@@ -129,7 +168,8 @@ def backtest_windows(
         assert_no_future_data(plan, origin, plan.config.context_length, plan.config.horizon)
         start_memory()
         model = model_builder()
-        params, zero_shot = _model_metadata(model)
+        params: Any = None
+        zero_shot: bool | None = None
         context_values = np.array(context, dtype=np.float64, copy=True)
         target_values = np.array(target, dtype=np.float64, copy=True)
         train_seconds: float | None = None
@@ -138,6 +178,9 @@ def backtest_windows(
             train_start = time.perf_counter()
             model.fit(context_values)
             train_seconds = time.perf_counter() - train_start
+            # Read metadata after fit: trained families (deep) only know their
+            # parameter count once the network is built.
+            params, zero_shot = _model_metadata(model)
             forecast = np.asarray(model.predict(plan.config.horizon), dtype=np.float64).reshape(-1)
             latency_ms = (time.perf_counter() - start) * 1000.0
             if forecast.size != target_values.size:
