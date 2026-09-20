@@ -132,7 +132,13 @@ def load_runs(
 
 
 def summarise(frame: pd.DataFrame) -> pd.DataFrame:
-    """Collapse window rows to one summary row per ``(model, family, horizon)``."""
+    """Collapse window rows to one summary row per ``(model, family, horizon)``.
+
+    A summary row must come from a single run. Two runs with different configs
+    can cover the same model and horizon (a stale run left behind by an
+    in-place config rewrite, or a full-stride follow-up); averaging them
+    silently would double-count windows, so that overlap is a hard error.
+    """
     work = frame.copy()
     for column in ("mae", "rmse", "mase", "smape", "latency_ms", "train_seconds"):
         work[column] = _numeric(work, column)
@@ -140,6 +146,10 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
     work["context_length"] = pd.to_numeric(
         work["context_length"], errors="coerce"
     ).astype("Int64")
+    if "_run_id" in work:
+        identity = work["_run_id"].astype(str)
+    else:
+        identity = work.get("config_hash", pd.Series("", index=work.index)).astype(str)
 
     def _percentile(series: pd.Series, q: float) -> float:
         clean = series.dropna()
@@ -149,6 +159,14 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
     keys = ["dataset", "horizon", "family", "model", "context_length"]
     for key, group in work.groupby(keys, dropna=False):
         dataset, horizon, family, model, context_length = key
+        run_ids = sorted(set(identity.loc[group.index]))
+        if len(run_ids) > 1:
+            raise ReportError(
+                f"ambiguous results: {model!r} ({family}) at horizon {horizon} "
+                f"appears in multiple runs ({', '.join(run_ids)}); remove the stale "
+                "run or scope --results-root to one config set so distinct configs "
+                "are not averaged"
+            )
         rows.append(
             {
                 "dataset": dataset,

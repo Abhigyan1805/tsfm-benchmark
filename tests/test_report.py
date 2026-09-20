@@ -109,6 +109,40 @@ def test_make_plots_dedupes_config_hashes_and_summarises(tmp_path: Path):
     assert by_model["naive"]["train_seconds"].strip() == ""
 
 
+def test_make_plots_refuses_to_average_distinct_configs_at_the_same_horizon(
+    tmp_path: Path,
+):
+    root = tmp_path / "results"
+    summary_path = tmp_path / "summary.csv"
+    _write_run(
+        root,
+        "20240101T000000Z-backtest",
+        {"name": "backtest", "horizon": 24},
+        [("naive", "baseline", 24, 2.0, 0.2)],
+    )
+    proc = _run_script(root, summary_path, tmp_path / "figures", "--no-figures")
+    assert proc.returncode == 0, proc.stderr
+
+    # A second, differently-configured run covers the same model and horizon.
+    # It must not be averaged into the first run's clean summary row.
+    _write_run(
+        root,
+        "20240102T000000Z-full",
+        {"name": "backtest_full", "horizon": 24, "stride": 24},
+        [("naive", "baseline", 24, 100.0, 0.2)],
+    )
+    proc = _run_script(root, summary_path, tmp_path / "figures", "--no-figures")
+    assert proc.returncode == 2, proc.stdout
+    assert "ambiguous" in proc.stderr
+    assert "Traceback" not in proc.stderr
+
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["model"] for row in rows] == ["naive"]
+    assert float(rows[0]["mae"]) == pytest.approx(2.0)
+    assert int(rows[0]["n_windows"]) == 1
+
+
 def test_make_plots_reports_an_empty_store_without_a_traceback(tmp_path: Path):
     root = tmp_path / "results"
     root.mkdir()
