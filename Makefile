@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-.PHONY: test lint smoke data backtest deep tsfm report licenses reproduce
+.PHONY: test lint smoke data backtest horizons deep tsfm report licenses reproduce
 
 test:
 	$(PYTHON) -m pytest
@@ -17,6 +17,14 @@ data:
 backtest:
 	$(PYTHON) -m tsbench run --config configs/experiments/backtest.yaml
 
+# The remaining horizons of the primary 24/48/96/192 sweep. `make backtest`
+# runs the 24h primary; this target completes the sweep on the same frozen
+# boundaries.
+horizons:
+	$(PYTHON) -m tsbench run --config configs/experiments/backtest_h48.yaml
+	$(PYTHON) -m tsbench run --config configs/experiments/backtest_h96.yaml
+	$(PYTHON) -m tsbench run --config configs/experiments/backtest_h192.yaml
+
 deep:
 	$(PYTHON) -m tsbench run --config configs/experiments/deep.yaml
 
@@ -24,7 +32,7 @@ tsfm:
 	$(PYTHON) -m tsbench run --config configs/experiments/tsfm.yaml
 
 report:
-	$(PYTHON) -m tsbench run --config configs/experiments/report.yaml
+	$(PYTHON) scripts/make_plots.py
 
 licenses:
 	$(PYTHON) -m tsbench licenses

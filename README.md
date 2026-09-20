@@ -16,15 +16,27 @@ leakage-audited splits, metrics, rolling-origin backtest, results schema, paired
 statistics, and CI. `make smoke` runs end-to-end on the committed fixture through the
 real `naive` baseline; GPU runs go through the compute handoff in `docs/colab-handoff.md`.
 
+**First real results (local tier).** The five local families now run end-to-end on the
+real Monash *Electricity Hourly* dataset over horizons 24/48/96/192, on a bounded
+origin sample of the frozen splits. On 24 series at the 24-step horizon the seasonal
+floor leads (seasonal MASE **1.00** for `seasonal_naive`); classical `auto_ets` is the
+best learned model (**1.14** at ≈177 ms/forecast), `xgboost_lags` is competitive
+(**1.29** at ≈104 ms), and non-seasonal `auto_arima` trails badly (**3.03** at ≈530 ms).
+Full table, figures, and the measured-vs-pending list: [`REPORT.md`](REPORT.md) and
+[`docs/results_summary.csv`](docs/results_summary.csv). Deep and TSFM zero-shot tiers
+are not in this run (GPU slice, separate task).
+
 ## Quickstart
 
 The `models` extra installs the local model tier's runtime deps (`xgboost`,
 `scikit-learn`, `statsforecast`, `statsmodels`); without it the tier's tests skip.
+The `report` extra adds `matplotlib` for the figures (it is also in `dev`, so CI
+exercises the report script).
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,models]"
+pip install -e ".[dev,models,report]"
 make test
 make lint
 ```
@@ -37,10 +49,11 @@ make lint
 | `make lint` | run ruff |
 | `make smoke` | tiny end-to-end run: `python -m tsbench run --config configs/experiments/smoke.yaml` over `tests/fixtures/smoke_series.csv` through the `local_csv` loader |
 | `make data` | fetch and checksum-verify the dataset catalogue (`python -m tsbench.data.build_catalog --materialize`; see `data/manifests/PROVENANCE.md`) |
-| `make backtest` | rolling-origin backtest (`configs/experiments/backtest.yaml`) |
+| `make backtest` | 24h rolling-origin backtest, all five local families (`configs/experiments/backtest.yaml`); bounded origin stride, see `REPORT.md` |
+| `make horizons` | complete the primary sweep at 48/96/192 on the same frozen boundaries (`configs/experiments/backtest_h{48,96,192}.yaml`) |
 | `make deep` | LSTM / small Transformer run (`configs/experiments/deep.yaml`) |
 | `make tsfm` | TimesFM 2.5 / Chronos-Bolt zero-shot run (`configs/experiments/tsfm.yaml`) |
-| `make report` | aggregate results and regenerate figures |
+| `make report` | aggregate the telemetry store and regenerate `docs/results_summary.csv` + `docs/figures/` (`scripts/make_plots.py`) |
 | `make licenses` | print the model license manifest from `configs/models.yaml` |
 | `make reproduce` | rerun the documented end-to-end path |
 
@@ -95,13 +108,17 @@ non-commercial and deliberately out of scope.
 
 ```
 configs/models.yaml            model keys, entrypoints, licenses, revisions
-configs/experiments/smoke.yaml smoke experiment
+configs/experiments/           smoke, backtest (24h), backtest_h{48,96,192}
 src/tsbench/base.py            frozen contract: Forecaster, ModelInfo, RESULT_COLUMNS
 src/tsbench/registry.py        manifest validation + license-gated factory
 src/tsbench/cli.py             python -m tsbench run|licenses
 src/tsbench/data/              dataset loaders and splits (data slice)
 src/tsbench/models/            model implementations (model and GPU slices)
 src/tsbench/evaluation/        metrics, backtest, stats, results, runner (data slice)
+scripts/make_plots.py          telemetry store -> summary CSV + figures (make report)
+docs/results_summary.csv       committed per-family per-horizon summary (real numbers)
+docs/figures/                  committed MASE and accuracy-vs-cost figures
+REPORT.md                      setup, results, measured-vs-pending, limitations
 tests/                         pytest suite and the smoke fixture
 ```
 
