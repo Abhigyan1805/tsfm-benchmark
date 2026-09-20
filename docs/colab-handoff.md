@@ -247,6 +247,49 @@ produces are committed.
 
 ---
 
+### B6. Experiment runs (the GPU tier's real sweep)
+
+The job route above scores one holdout per job. The benchmark's GPU tier instead
+runs the same rolling-origin experiment runner the CPU families used, so its
+rows land on the exact frozen windows. The `experiments` subcommand packs
+pending experiment configs into one self-contained kernel:
+
+```sh
+REF="$(git rev-parse HEAD)"          # pin the exact commit the kernel clones
+python scripts/kaggle_run.py experiments \
+    --config configs/experiments/gpu_probe.yaml \
+    --out results/kaggle-gpu-probe --ref "$REF" \
+    --pip 'timesfm[torch]' --pip chronos-forecasting --timeout 2400
+```
+
+The kernel clones `--repo` at `--ref`, installs the extra packages, fetches and
+checksum-verifies the frozen dataset through `python -m
+tsbench.data.build_catalog --materialize`, runs each pending config with
+`python -m tsbench run`, and bundles the run directories as
+`/kaggle/working/<run-name>/results.tar.gz`. A config that fails does not stop
+the rest: every config that completed still lands, so a partial GPU run is
+recoverable.
+
+Resume is by `config_hash`: a config whose `run.json` is already under `--out`
+is skipped and never packed, so a re-run after a preemption only measures the
+gap. `--dry-run` builds and prints the kernel without pushing.
+
+Recommended sequence for the primary sweep (after the probe succeeds):
+
+```sh
+python scripts/kaggle_run.py experiments \
+    --config configs/experiments/gpu.yaml \
+    --config configs/experiments/gpu_h48.yaml \
+    --config configs/experiments/gpu_h96.yaml \
+    --config configs/experiments/gpu_h192.yaml \
+    --out results --ref "$REF" \
+    --pip 'timesfm[torch]' --pip chronos-forecasting --timeout 10800
+```
+
+`make report` then merges `results/` with the committed `docs/telemetry/`
+store, so the combined CPU + GPU summary and figures regenerate from committed
+evidence.
+
 ## License policy (enforced in code)
 
 - **TimesFM 2.5 only.** `google/timesfm-2.5-200m-pytorch` is Apache-2.0 and is

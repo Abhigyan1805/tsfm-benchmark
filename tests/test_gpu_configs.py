@@ -57,6 +57,14 @@ def test_gpu_configs_reuse_the_cpu_frozen_windows():
             assert gpu.raw["model_configs"][model]["kwargs"]
 
 
+def test_gpu_probe_covers_every_gpu_registry_key_on_the_fixture():
+    probe = load_experiment(REPO_ROOT / "configs" / "experiments" / "gpu_probe.yaml")
+    assert probe.models == GPU_MODELS
+    assert probe.dataset["name"] == "smoke"
+    assert probe.dataset["loader"] == "local_csv"
+    assert probe.dataset["split_manifest"] == "tests/fixtures/smoke_split_manifest.json"
+
+
 def test_gpu_models_are_permissive_registry_keys():
     from tsbench.registry import load_registry
 
