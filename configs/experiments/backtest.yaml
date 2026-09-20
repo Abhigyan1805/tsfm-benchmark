@@ -1,0 +1,42 @@
+# Rolling-origin backtest on the primary electricity-demand dataset.
+#
+# Every family is evaluated on the same frozen windows: context_length values
+# end at the forecast origin and the horizon begins there, so no window reads a
+# value at or after its target block. `make backtest` runs this config after
+# `python -m tsbench.data.build_catalog --materialize` has fetched the data.
+
+name: backtest
+stage: backtest
+description: >-
+  Rolling-origin backtest over 24 electricity series at the primary 24h horizon,
+  with the context length treated as a first-class variable.
+
+dataset:
+  name: electricity_hourly
+  loader: monash_tsf
+  max_series: null
+  split_manifest: data/manifests/electricity_hourly_split_manifest.json
+
+split:
+  train_frac: 0.6
+  val_frac: 0.2
+  test_frac: 0.2
+  context_length: 168
+  horizon: 24
+  stride: 24
+  min_train_size: 168
+
+# Models are declared by registry key; entrypoints come from configs/models.yaml.
+# `make smoke` uses the tiny fixture instead.
+models:
+  - naive
+  - seasonal_naive
+
+model_configs:
+  seasonal_naive:
+    kwargs:
+      season_length: 24
+
+season_length: 24
+seed: 20240919
+output_dir: results

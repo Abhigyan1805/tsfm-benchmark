@@ -1,0 +1,625 @@
+{
+  "dataset": "electricity_hourly",
+  "license": "CC-BY-4.0",
+  "loader": "monash_tsf",
+  "metadata": {
+    "selection": "24 evenly-spaced series by index across T1..T321",
+    "source_member": "electricity_hourly_dataset.tsf",
+    "source_member_sha256": "bc33039133b9f1ca2e73d6b58d97306dd063f865fd12fbb0920ab312f047ad28",
+    "split_manifest_version": 1
+  },
+  "preliminary": false,
+  "series": [
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "e4fd39add5af322af5ffa8456985451ba2eeaae5f9000be190b6e0e2bb12880b"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "d8d6f3145190a40bff6084cb196745737fb492eefe5b6d4c7e9b8eb6728eb2d0"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "91b1a6082fe1080bc56b5c0f2f81f64608497dac4f95172fbb47e5d28955c9aa"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T1",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "17d7ed6a9437bc7fb38016e55098eecc85b1d4c65436b4d4b813ce9215beb4a4"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "b5c56bf352290d025f44db4367a213a575223d9c4da0b6c2636b0ee99a8906ff"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "91b4c23a4d01ffba514c2b0cb7136bc2d5e0656e6bbcf258c77f8ba2c1b7495a"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "2950feae0e3c5c52ff6ed72b7d58a61342c50741ec667fa662f087688e6f23d4"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T14",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "aff3e942667067a05180d34b90899e25dbc8f22742a3ee69ec20d1d40491df41"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "9ba6858af13ff90562fc8850ea284eeb5b3214e9d012e8abe31eaaba778bd3f0"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "69e5263c2ccec82c5e025de54a1d2b440f726e4724488f24eab64796a7da2803"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "9398bbb5e8b9016cef1cf4f7c292a2800ba347bd9b805987fad92c1b3aaa72bf"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T27",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "36f0506752cc52ab9ba26857c05f3c6942bde09045be63f9d9c4ea5431da003f"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "987558a3a19737fdbacbcfae73a4b4d79e75a2adc1b38bf8d475b83ec002d3fe"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "0563301d762e9f9f636b01d942187df8d89233e3e443efb4af9f546630bc3b1a"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "bef90cf8d43de678bbf8b257e58ae966dfbcad263b25c18c1941d72f48fe126c"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T41",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "46c1001b94f657d45363081bb1ae33b43a12debea62c0d0136450055ba308d0b"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "f02ab771e2797e6bf40a13821460d53b961ca4b181d7e19b5fe50deaead0e26f"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "9f857d9031494d312bf88f9ce50300656202cea9447d1d33439172d5541e8de6"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "30f702461a6e235d037a90955522828c4888bcfe60d5a69fe2172ec9757b3d62"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T54",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "0066d823247e689be92ff542f2b853dd686f15cab03b66ffb841024351dcf57a"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "660cbee6dd4c86ff734c4b4921cab73dc889f4993cfb1f137934106e0e470c16"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "f68cbbbea2efc3befcc24923d69575055d960f0af833b8639a2fc750f5682dbf"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "f154ed4173187d8b52dda839b21bc427ff50e3b2f6a094fa8e139675d0260b3f"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T67",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "02207ea35e6f184da645b7b277fcf8203af57ab425a4051c50ff7c69a993447a"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "babd5eb720fc1d53e66b3d2b926053c5502dc07f8f2d8af0d59928ee74b39b18"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "e4d94e0cc21b12197af7f450f5a0ad6145246bada0c95161a14361f7d74ff3bf"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "ba8fd38418d75b3788d6f17b51d35e54157afd374c2b2bb17124c0f6044aefc8"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T81",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "dd6db885ed4ea828625d58d6011cbb9f4667615e2a04214258538ca4aac9cbad"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "aed47a0eb1713ff23bd1dfb2249737a743016a22b515ff988d37973cf2b073c5"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "6fb8cae22ecdbb819edbdfd6f5d5213865d28308f39bb7dc7026a4a9f46a2822"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "05d8163774e05d977cea8c22b499d3829b9bbf0b8791b38acd1ddb4ba71320fe"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T94",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "8e12e4275b237cb9bf6de3faee321ed2fdc1910db149926908398195ada3fdd1"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "916f8bbf447806d14c9e694070c47fce5cc9aa3866b9ec46885f59c52333d382"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "866562a5fa03e094b1dd441208739bd0875d491056f3f7aa23b7e12ffcdfbde8"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "9d908ecfb6b256def8b49a7c504e6c889c4b0e41fe6ce3e01863dd7b61a20aa0"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T108",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "e45528b362906596303c88185b4a779998d52ccccbe12959f78a507264511cc4"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "30c54836e893b27f5afda7553eac59196669a5880b8b5130c333c7634248fd21"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "5e82c58cc1963529bd512ea95c93d505b9b2656fe97a6be96fa7a874daf09e52"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "dd5de903b4fe26f88675c04aab51312160d3a8d476b1ccfa4c592a8d17b58b93"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T121",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "c5f9d22ee00f3e72d8f15979105739cd46335930e94770554eed79d92c2e278d"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "921383d1fdc1f97733ee4cf0265d2ed990348e9cc9e3fef36f0332b677317138"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "de2ff975b7e4907e263600b981c4312842a940235a61e36dd538aec2cf835bb3"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "dcfe8cc3d9e833e75a0ffae94d836724decc42698a00c9d9643241db38c55329"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T134",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "acac8ee15208df08eaa9f60a1c0a6fb175dcd22b91f79f7f9a5313c653c6b509"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "52b8a515e985a4975a9c7b9ecda2e13073a1f2764f100e3b158126690f7a3cb0"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "43baa0702b8cacb71cbe2f65dfcfa1119a4945e39a3dc3f168bd6147c41ba6a6"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "78b90ee4f96c0b8e3db688a91a1c16a635bf12d44bf0d89674fc1f4ce2f91411"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T148",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "29bac813b6096eaddc88e8c2118c3bb00b5341e45580606f5732638a06b33a4c"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "5e316a6317de5193543b2cf3ae8ea41c76460e5fe02367b1ee9f6882ad38a47e"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "5999b903ee2a73a4c4ae5c19811ea8322cc018fb549252e9ee0c61f0cf2c9e08"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "db68dc7880254a7886e9a675048d30a88434c311a8c1046f83c72dcea86c7228"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T161",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "b82072c618996bb1faf490e3afdc01b061e507ec9907035b551eaa28372dc44c"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "3d1352681102fe360006d591eed4e069335e7be703934904d4be57fc21fd3c37"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "2ead7caf2eb3d7ba28bdc8009852a8a531ce17a9cd5c534827f35995236080fd"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "0cee141b98a7ca132cbbeb75f6e3d647b20f7f66eaa5e542d924263ee44d538c"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T174",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "be591dc9c01ede3fcb328a48b1ba291ac166dc0dfa272ae6f0ea57c6561edff2"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "66d73b29f0a01bf60df791e87b40a4119a86b9a6f42f90363feb49317a7ae8c3"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "c19d7ab3eef8dce73e12e8d2989de2b735b5054841f392994dde55ca8b2f8057"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "63a638a126c93e4dae72fd74d857b093e5c8d093d1379dc9f7dbe0e2d8fe5aca"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T188",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "330f376e51e54ea0d3de73267ae01c928c4f21cb8f85e36661e6e198db81dea9"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "6c95d32174cb2461cbcee1f67bcc075be6abae7c861627818614a8961acc3b77"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "63ee6fd97f1b0ee991011de5a6907799111224d7ba67b6719bdeaa46430d5b43"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "2b6f081cf19da1fe7262ff0aba9b96709d3aec647a22f8cc73b825f3adb216f9"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T201",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "48575d9f361a7f427711faa3be189480de533e69b47f8fa23ca3bce60d0ce4a5"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "da55c65ce54b2ae9ccb206e32f00aa66b3ab24080053529eedf72fd1db3ea1fb"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "512342626aa18752dd575eb902d93a223f20af96cfc898a90dfeb78e7cd2fc8c"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "a922d779e1fd48f5f9b17e8223813d2e6da1093fd86d469cc84505a32ae1ec23"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T215",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "60a14e6a534d8a9cb1dd3282db77dd175219f78412c131701f6414095804c793"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "fb2b339a9a3f58c78310328ecf9a3389e2fced30bb327d6fda5a3bdeba28c292"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "f5617a1c20d22391d516f09e3e7d7c29dcda327c509d16d4123b3a4da37d2a4f"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "8648e6689d8e935c4bc6baab44d04105addf31696f9876ec58bafeefc62b34d1"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T228",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "2fdf573d5bce2a219472dfe9a5370f963f57fe7c260401efea2ea673bdddc1ac"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "f34e64264516f0e74b96cd3d5f088411127c1c1ac6d4237f416a24163b6eb93c"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "4026fecd2c2900a1a7bab455d361caafc520d04cbdab00e698aabee20b08a736"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "63e5d8e12813372621fc9f3ec876a14fb338c470b4948bf9388fb86565a7aa6e"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T241",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "9f390c25595e0560ac59c682e501d48070c788b346fc52e8ea5b04a345a895e2"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "53ba9525947c5de62b0776ca97c309a78de0f97128295e992621ba1a3d3041bd"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "5d6b969e75080f14626c05a09da538d6648d466a7ef7bf5a6041c924b88a5864"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "ca5f95ab999a3853d75759e1543adda5a94b649c929a60a9cceeba4ad3af3b56"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T255",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "6921c5e94e729a1a96ea5e5d33e57e60c8050434e5282a5f1f38d19e04ed5141"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "c73278cd73a8ca1bcb1e9d8a588b638d0f82cdcd152286b912b5912408e84a8a"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "ac95dd444b41ba3d5bb45854a128b8c457dbf9932119cf9ae1adeddef11be406"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "e81a643b7d29c0e37b4047d0979789d2a00105704f0c09a23f419ce9cdfe3c3e"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T268",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "057a8d2898e090e091c645c8256760c836847f97ae974ec171fd0e25c2b20b24"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "0a5bf8c034192dee70b4edaf6a02d8d5a397f28197107cab7864f4fe4d80202e"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "a2ccc5867bdae98f4f41503bdfaaacfc10d320f645297e19c0115e145d382453"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "89f5f73954239eab1f8c73131135336bf7d91e3a54ad22bebbc7ad7954adfe1b"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T281",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "710689367529db531e0ad439c2da86dd12a1b19ed7a9001d8633ebdbf637f9b7"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "47969cb1eb3301e01fdc7eac8dc908ddfae6080e59afec2bd3b784a5d9e7daae"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "1a8c2cec08ee2bd1b14165a56da6dbe34b4fb50b6c809c5a0859e2d50339e22d"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "a6999257385a7f31ebc31b863bac3fc2dca6c6da7b3bde28a9e63a710a312b7e"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T295",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "0e3ee642d52ea578d2be87a1412fa838f48e688ed6d031648db772f009a46530"
+    },
+    {
+      "boundary": {
+        "test_end": {
+          "end": 26304,
+          "n_values": 3,
+          "sha256": "1b0602aada3612bb9654b424dd54479b50d4f37eda9e73308bc2c42ce4b54e39"
+        },
+        "train_end": {
+          "end": 15782,
+          "n_values": 3,
+          "sha256": "97b94e07aaa5383ab0281d28279f16a3212cfcf864b0403b98f3be510622b030"
+        },
+        "val_end": {
+          "end": 21042,
+          "n_values": 3,
+          "sha256": "b68faf9693608a4fb4bc3ee3e6643457657325df55af49d32c7d4f3e82b52bf6"
+        }
+      },
+      "n_observations": 26304,
+      "series_id": "T308",
+      "test_end": 26304,
+      "train_end": 15782,
+      "val_end": 21042,
+      "value_sha256": "a0690f4884ddc006031c9fa804fc19babda5977dce15164704305da138c7929c"
+    }
+  ],
+  "source": "https://zenodo.org/records/4656140/files/electricity_hourly_dataset.zip?download=1",
+  "split": {
+    "context_length": 168,
+    "horizon": 24,
+    "min_train_size": 168,
+    "stride": 24,
+    "test_frac": 0.2,
+    "train_frac": 0.6,
+    "val_frac": 0.2
+  },
+  "version": 1
+}
