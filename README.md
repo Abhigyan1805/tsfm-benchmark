@@ -97,11 +97,11 @@ and license are recorded in `run.json` under `unregistered_models`; the config
 key is stamped as the row's `model` and the declared family as its `family`, so
 an unregistered result carries its provenance instead of only asserting it.
 `make report` surfaces that provenance in `docs/results_summary.csv` as the
-`unregistered` flag and the `unregistered_license` column (both unset for
-registry-backed rows), and marks the same rows in the figures. Registry-known
-names still pass the gate (their not-yet-landed fallback calls `check_license`
-before importing the config entrypoint), and the TSFM wrappers still refuse
-unverified checkpoint ids through the fallback.
+`unregistered` flag and the `unregistered_license` column (false and empty
+respectively for registry-backed rows), and marks the same rows in the figures.
+Registry-known names still pass the gate (their not-yet-landed fallback calls
+`check_license` before importing the config entrypoint), and the TSFM wrappers
+still refuse unverified checkpoint ids through the fallback.
 
 ## Models and the license gate
 

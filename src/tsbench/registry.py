@@ -1,8 +1,11 @@
 """Model registry and license gate for tsfm-benchmark.
 
-``configs/models.yaml`` is the single source of truth for model entrypoints
-and their licenses. Loading validates the manifest; instantiation enforces the
-license gate.
+``configs/models.yaml`` is the single source of truth for registry model
+entrypoints and their licenses. Loading validates the manifest; instantiation
+enforces the license gate. A config-declared model the manifest does not know
+must opt in via :func:`unregistered_allowed`, declare a family and a license
+(:func:`parse_unregistered_spec`), and pass the permissive-license gate
+(:func:`check_license`).
 """
 
 from __future__ import annotations

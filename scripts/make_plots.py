@@ -18,7 +18,8 @@ A model the run opted into as an unregistered config-declared entrypoint is
 recorded in that run's ``run.json`` under ``unregistered_models``; the runner
 also stamps the config key as the row's ``model``. The summary carries that
 provenance: ``unregistered`` is true and ``unregistered_license`` names the
-declared license for those rows, and both are empty for registry-backed rows.
+declared license for those rows; registry-backed rows carry ``unregistered``
+false and an empty ``unregistered_license``.
 The figures mark the same rows (hatched bars, an ``[unregistered]`` annotation)
 so an unregistered result is never reported silently.
 
