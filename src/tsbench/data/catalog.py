@@ -248,9 +248,12 @@ def resolve_member_path(spec: DatasetSpec, *, root: str | Path = ".") -> Path | 
 def verify_local_dataset(spec: DatasetSpec, *, root: str | Path = ".") -> dict[str, Any]:
     """Verify an already-downloaded dataset and report provenance.
 
-    Never downloads. The result carries ``preliminary=True`` when the data (or
-    its pinned checksum) is unavailable, so callers can surface the gap instead
-    of pretending the split is frozen.
+    Never downloads. The result carries ``preliminary=True`` when the data is
+    absent or its pinned member checksum does not match, so callers can surface
+    the gap instead of pretending the split is frozen. When there is no member
+    checksum to check, the catalogue's own ``preliminary`` declaration decides:
+    a committed local fixture is not marked preliminary just because it has no
+    sha256 pin, while a remote source without one still is.
     """
     target = _resolve_spec_path(spec, Path(root))
     report: dict[str, Any] = {
@@ -268,5 +271,5 @@ def verify_local_dataset(spec: DatasetSpec, *, root: str | Path = ".") -> dict[s
             expected = str(spec.member_sha256).lower()
             report["preliminary"] = report["sha256"] != expected
         else:
-            report["preliminary"] = spec.sha256 is None
+            report["preliminary"] = spec.is_preliminary
     return report

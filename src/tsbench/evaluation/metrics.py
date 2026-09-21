@@ -121,6 +121,15 @@ def mase(
     ``season_length + 1`` observations) returns ``nan``. A zero denominator
     returns ``0.0`` for an exact forecast and ``inf`` otherwise; a finite
     non-zero denominator divides the MAE.
+
+    The backtest passes ``y_train=context_values``, so a scored window's scale
+    comes from the rolling ``context_length`` lookback rather than the full
+    in-sample training slice: "seasonal MASE" in the results tables is this
+    rolling-context variant of the textbook statistic, and the reference series
+    is the only thing that differs. On a synthetic 26,304-point series the audit
+    measured a +8.77% shift in the m=24 denominator against the textbook slice;
+    the drift is largely model-independent, so it moves levels more than
+    rankings. See REPORT.md §1.
     """
     actual, forecast = _as_pair(y_true, y_pred)
     if scale is None:

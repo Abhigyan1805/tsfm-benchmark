@@ -149,6 +149,18 @@ def assert_context_only_scaling(
 
     The scaler must be fittable from ``context`` alone and must keep the
     context and target transforms consistent with those context statistics.
+
+    What the audit can and cannot see: the checks below compare the fitted
+    statistic against the context-only statistic, so they catch a scaler that
+    *derives* its statistic from the target. They cannot infer the intended
+    statistic for an arbitrary transform, so a transform that ignores the
+    statistics it fitted is caught instead by fitting a second instance on a
+    perturbed context and confirming the same probe transforms differently. The
+    perturbation reverses the order as well as shifting location and scale, so a
+    legitimate transform (including an order-based one) still moves; only a
+    transform that never reads its fit stays byte-identical. This is a
+    sanity check on the transform, not a proof that it used the fit in any
+    particular way.
     """
     context = np.asarray(context, dtype=np.float64).reshape(-1)
     target = np.asarray(target, dtype=np.float64).reshape(-1)
@@ -183,6 +195,31 @@ def assert_context_only_scaling(
             "scaler fitted on the context+target window still reports the "
             f"context-only statistic {combined_center}; it does not derive "
             "statistics from the window it is fitted on",
+        )
+    # A transform that ignores its fitted statistics reports the correct center
+    # yet was never actually fitted, so the statistic comparison above cannot
+    # see it. Fit a second instance on a perturbed context (order reversed,
+    # location and scale changed) and require the transform of the original
+    # context to move; an ignored fit is a no-op and yields identical output.
+    scale = float(np.std(context))
+    offset = 10.0 * (abs(center) + scale + 1.0)
+    perturbed = -2.0 * context + offset
+    scaler_on_perturbed = factory()
+    if origin is not None:
+        scaler_on_perturbed.fit(perturbed, origin=origin)
+    else:
+        scaler_on_perturbed.fit(perturbed)
+    honest_probe = np.asarray(scaler.transform(context), dtype=np.float64)
+    perturbed_probe = np.asarray(scaler_on_perturbed.transform(context), dtype=np.float64)
+    if (
+        honest_probe.shape == perturbed_probe.shape
+        and np.allclose(honest_probe, perturbed_probe, rtol=0, atol=1e-9, equal_nan=True)
+    ):
+        return LeakageAudit(
+            "context_scaling",
+            False,
+            "scaler transform produced identical output for two different fit "
+            "windows; it ignores the statistics it fitted",
         )
     return LeakageAudit("context_scaling", True, "scaler derived from context only")
 

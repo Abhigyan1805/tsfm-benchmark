@@ -118,6 +118,30 @@ def test_scaler_that_ignores_its_fitted_window_is_rejected():
     assert "window" in audit.detail
 
 
+def test_scaler_transform_that_ignores_its_fit_is_rejected():
+    """An honestly-fitted but no-op transform is caught by the perturbation probe."""
+    _, context, target, origin = _window()
+
+    class IgnoringTransform:
+        """Fits real statistics, then transforms with a function of the input alone."""
+
+        def fit(self, values, origin=None):
+            self.center = float(np.mean(values))
+            spread = float(np.std(values))
+            self.scale = spread if spread > 0 else 1.0
+            return self
+
+        def transform(self, values, indices=None):
+            return np.asarray(values, dtype=np.float64)
+
+    audit = assert_context_only_scaling(
+        context, target, scaler_factory=IgnoringTransform, origin=origin
+    )
+    assert audit.passed is False
+    assert audit.name == "context_scaling"
+    assert "ignores the statistics" in audit.detail
+
+
 def test_scaler_refuses_to_re_derive_at_future_indices():
     _, context, target, origin = _window()
     scaler = ContextScaler().fit(context, origin=origin)

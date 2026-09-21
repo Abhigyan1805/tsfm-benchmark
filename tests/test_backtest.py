@@ -9,7 +9,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tsbench.data.splits import SplitConfig, compute_split_plan, enumerate_windows
+from tsbench.data.splits import (
+    SplitConfig,
+    SplitError,
+    compute_split_plan,
+    enumerate_windows,
+)
 from tsbench.evaluation import runner, stats
 from tsbench.evaluation.backtest import backtest_model, backtest_windows
 from tsbench.evaluation.contract import RESULT_COLUMNS
@@ -49,6 +54,13 @@ def test_windows_are_disjoint_in_time_and_ordered():
         # A full lookback is behind the origin and a full horizon in front.
         assert origin - plan.config.context_length >= plan.val_end
         assert origin + plan.config.horizon <= plan.test_end
+
+
+def test_enumerate_windows_refuses_geometry_with_no_origin():
+    """Impossible geometry is a misconfiguration, not an empty experiment."""
+    plan = _plan(200, context_length=300, horizon=24, stride=24)
+    with pytest.raises(SplitError, match="no test window fits geometry"):
+        enumerate_windows(plan, period="test")
 
 
 def test_backtest_produces_one_row_per_window():

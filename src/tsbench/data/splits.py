@@ -205,6 +205,9 @@ def enumerate_windows(
     A window origin must leave a full lookback behind it and a full horizon in
     front of it *inside the requested period*. When ``start_index`` is given,
     the first origin is ``max(start_index, period_start + context_length)``.
+    Empty geometry (no origin fits the requested period, for example a
+    300-point context on a 200-point series) raises :class:`SplitError` rather
+    than returning ``[]``, so a mis-configured experiment fails loudly.
     """
     if period not in {"train", "val", "test"}:
         raise SplitError(f"unknown period {period!r}")
@@ -220,6 +223,13 @@ def enumerate_windows(
     while origin <= last:
         origins.append(origin)
         origin += plan.config.stride
+    if not origins:
+        raise SplitError(
+            f"no {period} window fits geometry {plan.config.as_dict()}: the "
+            f"{period} period [{lo}, {hi}) cannot hold a "
+            f"{plan.config.context_length}-point lookback plus a "
+            f"{plan.config.horizon}-point horizon"
+        )
     return origins
 
 

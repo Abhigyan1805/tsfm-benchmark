@@ -14,17 +14,21 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from tsbench.evaluation.results import RunContext, result_row, write_results
+from tsbench.evaluation.results import RunContext, config_hash, result_row, write_results
+from tsbench.evaluation.runner import load_experiment
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "make_plots.py"
 DATASET = "electricity_hourly"
+EXPERIMENTS_DIR = REPO_ROOT / "configs" / "experiments"
+TELEMETRY_ROOT = REPO_ROOT / "docs" / "telemetry"
 
 
 def _write_run(
@@ -350,6 +354,61 @@ def test_make_plots_prefers_the_live_root_over_stale_telemetry(tmp_path: Path):
     assert float(by_model["naive"]["mae"]) == pytest.approx(2.0)
     assert int(by_model["naive"]["n_windows"]) == 1
     assert float(by_model["timesfm25"]["mae"]) == pytest.approx(90.0)
+
+
+def test_committed_telemetry_config_hashes_match_the_current_configs():
+    """A fresh run must reuse the committed config hash, or `make report` fails.
+
+    ``make report`` refuses to average two config hashes for one experiment. If
+    a committed telemetry run's config is edited cosmetically afterwards, a
+    fresh ``make backtest`` produces a second hash and the documented
+    ``make reproduce`` sequence dies at the last step. Pinning every committed
+    run to the config currently in the tree guards that path.
+    """
+    run_jsons = sorted(TELEMETRY_ROOT.rglob("run.json"))
+    assert run_jsons, "the committed telemetry store is missing"
+    for run_json in run_jsons:
+        metadata = json.loads(run_json.read_text(encoding="utf-8"))
+        experiment = metadata["experiment"]
+        config_path = EXPERIMENTS_DIR / f"{experiment}.yaml"
+        assert config_path.is_file(), f"{run_json} has no config {config_path}"
+        current = config_hash(load_experiment(config_path).raw)
+        assert current == metadata["config_hash"], (
+            f"{run_json}: {config_path.name} now hashes to {current} but the "
+            f"committed run records {metadata['config_hash']}; a cosmetic config "
+            "edit breaks the documented reproduce sequence"
+        )
+
+
+def test_make_report_merges_the_committed_telemetry_with_an_empty_live_store(
+    tmp_path: Path,
+):
+    """The report step of `make reproduce` succeeds over the committed store."""
+    empty_results = tmp_path / "results"
+    empty_results.mkdir()
+    summary_path = tmp_path / "summary.csv"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--results-root",
+            str(empty_results),
+            "--telemetry-root",
+            str(TELEMETRY_ROOT),
+            "--dataset",
+            DATASET,
+            "--summary",
+            str(summary_path),
+            "--no-figures",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    assert proc.returncode == 0, proc.stderr
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 36
 
 
 @pytest.mark.skipif(

@@ -32,6 +32,14 @@ past a day of CPU; the daily seasonal structure is carried instead by
 `seasonal_naive`, `auto_ets` (season 24), and the XGBoost lag features
 `[1, 2, 3, 24, 25, 48]`.
 
+The reported **seasonal MASE** uses the rolling `context_length` (168-value)
+lookback as its scale base — `backtest.py` passes `y_train=context_values` — not
+the full in-sample training slice, so it is a rolling-context variant of the
+textbook statistic; the reference series is the only thing that differs. The
+independent audit measured a **+8.77%** shift in the m=24 denominator on a
+synthetic 26,304-point series. The drift is largely model-independent, so it
+moves levels more than rankings. See `tsbench.evaluation.metrics.mase`.
+
 Run provenance: CPU telemetry under `docs/telemetry/cpu/`, GPU telemetry under
 `docs/telemetry/gpu/`; each run's `run.json` carries the git sha
 (`7fd54a3…` CPU, `dcb2c10…` GPU), config hash, split-manifest digest, and
