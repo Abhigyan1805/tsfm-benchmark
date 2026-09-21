@@ -284,6 +284,76 @@ def test_make_plots_carries_peak_memory_params_and_zero_shot(tmp_path: Path):
     assert by_model["naive"]["train_seconds"].strip() == ""
 
 
+def test_make_plots_marks_unregistered_provenance_from_run_json(tmp_path: Path):
+    root = tmp_path / "results"
+    context = RunContext.create(
+        "own_forecaster",
+        {"name": "own_forecaster", "horizon": 24, "models": ["mine", "naive"]},
+        run_id="20240301T000000Z-own",
+        cwd=root,
+        unregistered_models={
+            "mine": {
+                "entrypoint": "tests._stub_models:ConstantForecaster",
+                "family": "ml",
+                "license": "MIT",
+                "revision": "unregistered",
+                "zero_shot": False,
+                "registered": False,
+            }
+        },
+    )
+    rows = [
+        result_row(
+            run_id=context.run_id,
+            dataset=DATASET,
+            series_id="S0",
+            model="mine",
+            family="ml",
+            context_length=168,
+            horizon=24,
+            window_index=0,
+            mae=5.0,
+            rmse=7.0,
+            mase=0.5,
+            smape=5.0,
+            latency_ms=1.0,
+            train_seconds=0.2,
+            git_sha=context.git_sha,
+            config_hash=context.config_sha,
+        ),
+        result_row(
+            run_id=context.run_id,
+            dataset=DATASET,
+            series_id="S0",
+            model="naive",
+            family="baseline",
+            context_length=168,
+            horizon=24,
+            window_index=1,
+            mae=2.0,
+            rmse=3.0,
+            mase=0.2,
+            smape=2.0,
+            latency_ms=0.1,
+            git_sha=context.git_sha,
+            config_hash=context.config_sha,
+        ),
+    ]
+    write_results(rows, root=root, context=context)
+
+    summary_path = tmp_path / "summary.csv"
+    proc = _run_script(root, summary_path, tmp_path / "figures", "--no-figures")
+    assert proc.returncode == 0, proc.stderr
+    with open(summary_path, newline="", encoding="utf-8") as handle:
+        by_model = {row["model"]: row for row in csv.DictReader(handle)}
+    # The opted-in unregistered row is visibly marked with its declared license.
+    assert by_model["mine"]["unregistered"] == "True"
+    assert by_model["mine"]["unregistered_license"] == "MIT"
+    # A registry-backed row in the same run is untouched.
+    assert by_model["naive"]["unregistered"] == "False"
+    assert by_model["naive"]["unregistered_license"].strip() == ""
+
+
 def test_make_plots_recurses_into_tiered_telemetry(tmp_path: Path):
     """The committed store is nested as docs/telemetry/{cpu,gpu}/<run_id>."""
     root = tmp_path / "results"

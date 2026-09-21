@@ -110,6 +110,7 @@ class RunContext:
     split_manifest: str | None = None
     seed: int | None = None
     measured: bool = True
+    unregistered_models: dict[str, Any] = field(default_factory=dict)
     started_at: str = field(default_factory=utc_now)
     environment: dict[str, Any] = field(default_factory=dict)
 
@@ -123,6 +124,7 @@ class RunContext:
         split_manifest: str | None = None,
         seed: int | None = None,
         measured: bool = True,
+        unregistered_models: Mapping[str, Any] | None = None,
         cwd: str | Path | None = None,
     ) -> RunContext:
         return cls(
@@ -134,6 +136,7 @@ class RunContext:
             split_manifest=split_manifest,
             seed=seed,
             measured=measured,
+            unregistered_models=dict(unregistered_models or {}),
             environment={
                 "python": sys.version.split()[0],
                 "platform": platform.platform(),
@@ -151,6 +154,7 @@ class RunContext:
             "split_manifest": self.split_manifest,
             "seed": self.seed,
             "measured": self.measured,
+            "unregistered_models": self.unregistered_models,
             "started_at": self.started_at,
             "environment": self.environment,
         }

@@ -14,6 +14,15 @@ summary row per ``(model, family, horizon)``, and writes:
 * ``docs/figures/mase_by_family_horizon.png`` -- accuracy per family per horizon;
 * ``docs/figures/accuracy_vs_cost.png`` -- the accuracy/cost scatter.
 
+A model the run opted into as an unregistered config-declared entrypoint is
+recorded in that run's ``run.json`` under ``unregistered_models``; the runner
+also stamps the config key as the row's ``model``. The summary carries that
+provenance: ``unregistered`` is true and ``unregistered_license`` names the
+declared license for those rows; registry-backed rows carry ``unregistered``
+false and an empty ``unregistered_license``.
+The figures mark the same rows (hatched bars, an ``[unregistered]`` annotation)
+so an unregistered result is never reported silently.
+
 Several runs may cover the same dataset (for example a horizon sweep, or a
 re-run after a fix). Each run carries a ``config_hash``; only the newest run per
 hash is used so a re-run replaces rather than double-counts its predecessor.
@@ -32,7 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +65,8 @@ SUMMARY_COLUMNS = [
     "train_seconds",
     "params",
     "zero_shot",
+    "unregistered",
+    "unregistered_license",
 ]
 
 # Colour-blind-friendly qualitative palette, stable per family.
@@ -122,6 +133,24 @@ def _experiment(metadata: dict[str, Any], run_dir: Path) -> str:
     return str(metadata.get("experiment") or run_dir.name)
 
 
+def _unregistered_licenses(metadata: dict[str, Any]) -> dict[str, str]:
+    """Map each opted-in unregistered model key to its declared license.
+
+    ``run.json`` records the validated provenance under ``unregistered_models``
+    keyed by the config-declared model name, which the runner also stamps as the
+    result row's ``model``. Registry-backed rows do not appear here, so they are
+    never marked.
+    """
+    raw = metadata.get("unregistered_models")
+    if not isinstance(raw, Mapping):
+        return {}
+    licenses: dict[str, str] = {}
+    for model, entry in raw.items():
+        declared = entry.get("license") if isinstance(entry, Mapping) else None
+        licenses[str(model)] = str(declared).strip() if declared else "unregistered"
+    return licenses
+
+
 def load_runs(
     roots: str | Path | Sequence[str | Path], *, dataset: str | None = None
 ) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
@@ -163,6 +192,10 @@ def load_runs(
             frame["_git_sha"] = str(metadata.get("git_sha", "") or "")
             frame["_config_hash"] = str(metadata.get("config_hash", "") or "")
             frame["_root"] = str(directory)
+            licenses = _unregistered_licenses(metadata)
+            models = frame["model"].astype(str)
+            frame["_unregistered"] = models.map(licenses).notna()
+            frame["_unregistered_license"] = models.map(licenses).fillna("")
             frames.append(frame)
             runs.append(
                 {
@@ -280,6 +313,12 @@ def summarise(frame: pd.DataFrame) -> pd.DataFrame:
                 "zero_shot": any(_truthy(value) for value in group["zero_shot"])
                 if "zero_shot" in group
                 else False,
+                "unregistered": bool(group["_unregistered"].any())
+                if "_unregistered" in group
+                else False,
+                "unregistered_license": _first_present(group["_unregistered_license"])
+                if "_unregistered_license" in group
+                else None,
             }
         )
     summary = pd.DataFrame(rows, columns=SUMMARY_COLUMNS)
@@ -305,6 +344,8 @@ def format_markdown(summary: pd.DataFrame) -> str:
         "train (s)",
         "params",
         "0-shot",
+        "unregistered",
+        "license",
     ]
 
     def _fmt(value: Any, digits: int = 4) -> str:
@@ -348,6 +389,8 @@ def format_markdown(summary: pd.DataFrame) -> str:
                     _fmt_optional(row.get("train_seconds"), 3),
                     _fmt_optional(row.get("params"), 0),
                     _fmt_optional(row.get("zero_shot")),
+                    _fmt_optional(row.get("unregistered")),
+                    _fmt_optional(row.get("unregistered_license")),
                 ]
             )
             + " |"
@@ -378,21 +421,39 @@ def plot_mase_by_family_horizon(summary: pd.DataFrame, path: Path) -> None:
     width = 0.8 / len(models)
     x = range(len(horizons))
     fig, ax = plt.subplots(figsize=(1.9 * len(horizons) + 3.5, 5.0))
+    unregistered_any = False
     for index, model in enumerate(models):
         heights: list[float] = []
         for horizon in horizons:
             match = summary[(summary["model"] == model) & (summary["horizon"] == horizon)]
             heights.append(float(match["mase"].iloc[0]) if not match.empty else 0.0)
-        family = str(summary[summary["model"] == model]["family"].iloc[0])
+        model_rows = summary[summary["model"] == model]
+        family = str(model_rows["family"].iloc[0])
+        unregistered = (
+            bool(model_rows["unregistered"].any())
+            if "unregistered" in summary
+            else False
+        )
+        unregistered_any = unregistered_any or unregistered
         offset = (index - (len(models) - 1) / 2) * width
         ax.bar(
             [position + offset for position in x],
             heights,
             width=width,
-            label=model,
+            label=f"{model} (unregistered)" if unregistered else model,
             color=_FAMILY_COLOURS.get(family, "#666666"),
-            edgecolor="white",
+            edgecolor="black" if unregistered else "white",
             linewidth=0.6,
+            hatch="//" if unregistered else None,
+        )
+    if unregistered_any:
+        fig.text(
+            0.01,
+            0.01,
+            "hatched bars: unregistered config-declared model "
+            "(declared license in docs/results_summary.csv)",
+            fontsize=7,
+            alpha=0.75,
         )
     ax.set_yscale("log")
     ax.set_xticks(list(x))
@@ -418,9 +479,20 @@ def plot_accuracy_vs_cost(summary: pd.DataFrame, path: Path) -> None:
             continue
         colour = _FAMILY_COLOURS.get(str(row["family"]), "#666666")
         marker = {24: "o", 48: "s", 96: "^", 192: "D"}.get(int(row["horizon"]), "o")
-        ax.scatter(x, y, color=colour, marker=marker, s=70, edgecolor="white", zorder=3)
+        unregistered = _truthy(row.get("unregistered"))
+        ax.scatter(
+            x,
+            y,
+            color=colour,
+            marker=marker,
+            s=70,
+            edgecolor="black" if unregistered else "white",
+            linewidth=1.4 if unregistered else 1.0,
+            zorder=3,
+        )
         ax.annotate(
-            f"{row['model']} (h{int(row['horizon'])})",
+            f"{row['model']} (h{int(row['horizon'])})"
+            + (" [unregistered]" if unregistered else ""),
             (x, y),
             textcoords="offset points",
             xytext=(5, 4),

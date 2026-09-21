@@ -13,7 +13,10 @@
 
 Model construction goes through the registry when it is importable, and falls
 back to a config-declared local stub otherwise, so the smoke path can run on a
-branch where the foundation and model slices have not landed yet.
+branch where the foundation and model slices have not landed yet. A
+registry-unknown model may also declare its own entrypoint, but only when the
+run opts in with ``TSBENCH_ALLOW_UNREGISTERED`` and the config declares an
+allowlisted license and family, which are recorded in the run metadata.
 """
 
 from __future__ import annotations
@@ -176,6 +179,40 @@ def _load_series(
     raise RunnerError(f"dataset {spec.name!r}: unknown loader {loader!r}")
 
 
+def _unregistered_spec(name: str, model_cfg: Mapping[str, Any]) -> Any:
+    """Validate a config-declared, registry-unknown model.
+
+    Refuses the model unless the run explicitly opts in with
+    ``TSBENCH_ALLOW_UNREGISTERED`` and the config declares a non-empty,
+    allowlisted ``license`` plus a valid ``family``. The returned ``ModelSpec``
+    is the provenance recorded for the run.
+    """
+    from ..registry import (
+        ALLOW_UNREGISTERED_ENV,
+        LicenseError,
+        ModelConfigError,
+        check_license,
+        parse_unregistered_spec,
+        unregistered_allowed,
+    )
+
+    if not unregistered_allowed():
+        raise RunnerError(
+            f"model {name!r}: not in the model registry; declare its entrypoint, "
+            f"family, and license, and set {ALLOW_UNREGISTERED_ENV}=1 to run an "
+            "unregistered model"
+        )
+    try:
+        spec = parse_unregistered_spec(name, model_cfg)
+    except ModelConfigError as exc:
+        raise RunnerError(str(exc)) from exc
+    try:
+        check_license(spec)
+    except LicenseError as exc:
+        raise RunnerError(str(exc)) from exc
+    return spec
+
+
 def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: int | None) -> Any:
     """Instantiate a model, routing registry-known names through the license gate.
 
@@ -185,14 +222,16 @@ def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: in
     fallback for branches where the registered module has not landed yet, so it
     is used only when the registry's own entrypoint cannot be imported; that
     fallback still calls ``check_license`` first. Models the registry does not
-    know may declare their own entrypoint; that path imports the callable
-    directly and is therefore outside the registry's license gate (the TSFM
-    wrappers' own checkpoint-id tables still apply).
+    know may declare their own entrypoint only when the run opts in with
+    ``TSBENCH_ALLOW_UNREGISTERED`` and the config declares an allowlisted
+    license and family (see :func:`_unregistered_spec`); the TSFM wrappers' own
+    checkpoint-id tables still apply.
     """
     kwargs = dict(model_cfg.get("kwargs") or {})
     entrypoint = model_cfg.get("entrypoint")
     registry = _try_registry()
-    if registry is not None and name in registry:
+    registry_known = registry is not None and name in registry
+    if registry_known:
         registry_spec = registry.spec(name)
         try:
             target = _entrypoint_target(name, registry_spec.entrypoint)
@@ -209,6 +248,8 @@ def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: in
                 name, **_seed_kwargs(kwargs, target, model_cfg=model_cfg, seed=seed)
             )
     if entrypoint:
+        if not registry_known:
+            _unregistered_spec(name, model_cfg)
         target = _entrypoint_target(name, entrypoint)
         seeded = _seed_kwargs(kwargs, target, model_cfg=model_cfg, seed=seed)
         return target(**seeded) if seeded else target()
@@ -284,6 +325,43 @@ def _try_registry() -> Any | None:
         return None
 
 
+def _unregistered_provenance(experiment: ExperimentConfig) -> dict[str, dict[str, Any]]:
+    """Record declared provenance for every registry-unknown model.
+
+    Registered names are omitted: ``configs/models.yaml`` is their source of
+    truth and is already pinned in the run's config. Each unregistered model is
+    validated here -- opt-in, declared family, an allowlisted license, and an
+    entrypoint that builds -- so a run refuses it before any window executes,
+    and its declared provenance is stamped into ``run.json``.
+    """
+    registry = _try_registry()
+    known = set(registry.keys()) if registry is not None else set()
+    provenance: dict[str, dict[str, Any]] = {}
+    for name in experiment.models:
+        if name in known:
+            continue
+        model_cfg = _model_config(experiment, name)
+        spec = _unregistered_spec(name, model_cfg)
+        try:
+            _build_model(name, spec, model_cfg=model_cfg, seed=experiment.seed)
+        except RunnerError:
+            raise
+        except Exception as exc:
+            raise RunnerError(
+                f"model {name!r}: entrypoint {spec.entrypoint!r} cannot be built: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        provenance[name] = {
+            "entrypoint": spec.entrypoint,
+            "family": spec.family,
+            "license": spec.license,
+            "revision": spec.revision,
+            "zero_shot": spec.zero_shot,
+            "registered": False,
+        }
+    return provenance
+
+
 def _rows_for_model(
     forecast_rows: Sequence[WindowForecast],
     *,
@@ -335,6 +413,7 @@ def _row_zero_shot(outcome: WindowForecast) -> bool | None:
 def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[str, Any]:
     """Execute an experiment config and return a run summary."""
     experiment = load_experiment(config_path)
+    unregistered = _unregistered_provenance(experiment)
     base = Path(root)
     try:
         specs, _catalog_meta = load_catalog(base / experiment.datasets_config)
@@ -405,6 +484,7 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
         split_manifest=manifest_digest(manifest),
         seed=experiment.seed,
         cwd=base,
+        unregistered_models=unregistered,
     )
 
     all_rows: list[dict[str, Any]] = []
@@ -417,6 +497,7 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
             builder = lambda name=model_name, cfg=model_cfg: _build_model(  # noqa: E731
                 name, spec, model_cfg=cfg, seed=experiment.seed
             )
+            provenance = unregistered.get(model_name)
             outcomes = backtest_windows(
                 values,
                 plan,
@@ -425,6 +506,8 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
                 season_length=experiment.season_length,
                 track_memory=experiment.track_memory,
                 warmup=experiment.warmup,
+                family=(provenance or {}).get("family"),
+                model_name=model_name if provenance else None,
             )
             all_rows.extend(
                 _rows_for_model(

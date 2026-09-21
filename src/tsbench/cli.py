@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .registry import ALLOW_NONCOMMERCIAL_ENV, RegistryError, load_registry
+from .registry import (
+    ALLOW_NONCOMMERCIAL_ENV,
+    ALLOW_UNREGISTERED_ENV,
+    RegistryError,
+    load_registry,
+)
 
 __all__ = ["PipelineUnavailableError", "build_parser", "main"]
 
@@ -48,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-noncommercial",
         action="store_true",
         help=f"same as {ALLOW_NONCOMMERCIAL_ENV}=1 for this run",
+    )
+    run_parser.add_argument(
+        "--allow-unregistered",
+        action="store_true",
+        help=f"same as {ALLOW_UNREGISTERED_ENV}=1 for this run",
     )
 
     licenses_parser = subparsers.add_parser(
@@ -97,6 +107,8 @@ def _run(args: argparse.Namespace) -> int:
         return 2
     if args.allow_noncommercial:
         os.environ[ALLOW_NONCOMMERCIAL_ENV] = "1"
+    if args.allow_unregistered:
+        os.environ[ALLOW_UNREGISTERED_ENV] = "1"
     if args.output is not None:
         os.environ[RESULTS_DIR_ENV] = str(args.output)
     runner = _load_runner()
