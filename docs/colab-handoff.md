@@ -342,7 +342,7 @@ regenerate from committed evidence.
   `UnverifiedWeights` error; any other TimesFM id is refused too.
 - **Chronos-Bolt only, verified permissive.** The four `amazon/chronos-bolt-*`
   checkpoints are Apache-2.0 per their model cards and pinned by revision in
-  `tsbench/models/tsfm/__init__.py`. Any other Chronos id (including
+  `src/tsbench/models/tsfm/__init__.py`. Any other Chronos id (including
   `amazon/chronos-2`) is refused until its license is verified and added to the
   table.
 - Even for approved checkpoints, weights are never loaded unless

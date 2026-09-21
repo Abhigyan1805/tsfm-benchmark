@@ -87,6 +87,12 @@ and called with the experiment config path. The registry is
 `tsbench.registry.load_registry`; `ModelRegistry.instantiate` is the only public
 construction path and every call passes the license gate.
 
+A config-declared `entrypoint` for a name the registry does not know is the
+documented not-yet-landed-module fallback; it is imported directly and is
+therefore **outside** the registry's license gate. Registry-known names always
+route through `instantiate`, and the TSFM wrappers still refuse unverified
+checkpoint ids through the fallback.
+
 ## Models and the license gate
 
 `configs/models.yaml` declares nine keys: `naive`, `seasonal_naive`, `auto_ets`,

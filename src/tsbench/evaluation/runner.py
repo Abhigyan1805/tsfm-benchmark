@@ -184,7 +184,9 @@ def _build_model(name: str, spec: Any, *, model_cfg: Mapping[str, Any], seed: in
     actually built. A config-declared ``entrypoint`` is a stub fallback for
     branches where the registered module has not landed yet, so it is used only
     when the registry's own entrypoint cannot be imported. Models the registry
-    does not know may declare their own entrypoint.
+    does not know may declare their own entrypoint; that path imports the
+    callable directly and is therefore outside the registry's license gate (the
+    TSFM wrappers' own checkpoint-id tables still apply).
     """
     kwargs = dict(model_cfg.get("kwargs") or {})
     entrypoint = model_cfg.get("entrypoint")

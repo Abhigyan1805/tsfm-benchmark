@@ -47,9 +47,9 @@ datasets:
     split_manifest: data/manifests/electricity_hourly_split_manifest.json
     preliminary: false
     notes: >-
-      Primary dataset. 24 evenly-spaced series (T1..T321) form the benchmark
-      subset; the split manifest freezes per-series length, boundary hashes,
-      and backtest geometry.
+      Primary dataset. 24 evenly-spaced series (T1..T308; the full collection
+      holds 321) form the benchmark subset; the split manifest freezes
+      per-series length, boundary hashes, and backtest geometry.
 
   smoke:
     loader: local_csv

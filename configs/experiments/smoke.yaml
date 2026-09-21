@@ -9,11 +9,11 @@ dataset:
   timestamp_column: timestamp
   value_column: value
   split_manifest: tests/fixtures/smoke_split_manifest.json
+# Models are declared by registry key; entrypoints come from configs/models.yaml,
+# so `make smoke` constructs the real `naive` floor through the same
+# license-gated registry path as the backtests.
 models:
   - naive
-model_configs:
-  naive:
-    entrypoint: tests._stub_models:NaiveStub
 split:
   train_frac: 0.6
   val_frac: 0.2
