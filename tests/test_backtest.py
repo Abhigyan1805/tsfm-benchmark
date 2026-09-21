@@ -905,6 +905,142 @@ def test_config_entrypoint_fallback_still_honors_the_registry_license_gate(
         )
 
 
+def _registry_with(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *keys: str) -> None:
+    import yaml
+
+    from tsbench.registry import load_registry
+
+    models = {
+        key: {
+            "entrypoint": "tests._stub_models:NaiveStub",
+            "family": "baseline",
+            "zero_shot": True,
+            "license": "Apache-2.0",
+            "revision": "test-pin",
+        }
+        for key in keys
+    }
+    models_path = tmp_path / "models.yaml"
+    models_path.write_text(yaml.safe_dump({"models": models}), encoding="utf-8")
+    registry = load_registry(models_path)
+    monkeypatch.setattr(runner, "_try_registry", lambda: registry)
+
+
+def test_unregistered_entrypoint_requires_the_opt_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _registry_with(monkeypatch, tmp_path, "naive")
+    monkeypatch.delenv("TSBENCH_ALLOW_UNREGISTERED", raising=False)
+    with pytest.raises(runner.RunnerError, match="TSBENCH_ALLOW_UNREGISTERED"):
+        runner._build_model(
+            "mine",
+            None,
+            model_cfg={
+                "entrypoint": "tests._stub_models:ConstantForecaster",
+                "family": "baseline",
+                "license": "MIT",
+            },
+            seed=None,
+        )
+
+
+def test_unregistered_entrypoint_requires_a_declared_license(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _registry_with(monkeypatch, tmp_path, "naive")
+    monkeypatch.setenv("TSBENCH_ALLOW_UNREGISTERED", "1")
+    with pytest.raises(runner.RunnerError, match="license"):
+        runner._build_model(
+            "mine",
+            None,
+            model_cfg={
+                "entrypoint": "tests._stub_models:ConstantForecaster",
+                "family": "baseline",
+            },
+            seed=None,
+        )
+
+
+def test_unregistered_entrypoint_refuses_a_non_permissive_license(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _registry_with(monkeypatch, tmp_path, "naive")
+    monkeypatch.setenv("TSBENCH_ALLOW_UNREGISTERED", "1")
+    monkeypatch.delenv("TSBENCH_ALLOW_NONCOMMERCIAL", raising=False)
+    with pytest.raises(runner.RunnerError, match="CC-BY-NC-4.0"):
+        runner._build_model(
+            "mine",
+            None,
+            model_cfg={
+                "entrypoint": "tests._stub_models:ConstantForecaster",
+                "family": "baseline",
+                "license": "CC-BY-NC-4.0",
+            },
+            seed=None,
+        )
+
+
+def test_unregistered_entrypoint_builds_with_opt_in_and_declared_license(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _registry_with(monkeypatch, tmp_path, "naive")
+    monkeypatch.setenv("TSBENCH_ALLOW_UNREGISTERED", "1")
+    model = runner._build_model(
+        "mine",
+        None,
+        model_cfg={
+            "entrypoint": "tests._stub_models:ConstantForecaster",
+            "family": "baseline",
+            "license": "MIT",
+            "kwargs": {"value": 2.0},
+        },
+        seed=None,
+    )
+    assert isinstance(model, ConstantForecaster)
+    model.fit(np.array([1.0, 2.0, 3.0]))
+    assert np.allclose(model.predict(2), [2.0, 2.0])
+
+
+def test_unregistered_model_provenance_is_recorded_in_metadata_and_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[1]
+    smoke = yaml.safe_load(
+        (repo_root / "configs" / "experiments" / "smoke.yaml").read_text(encoding="utf-8")
+    )
+    smoke["models"] = ["mine"]
+    smoke["model_configs"] = {
+        "mine": {
+            "entrypoint": "tests._stub_models:ConstantForecaster",
+            "family": "ml",
+            "license": "MIT",
+            "kwargs": {"value": 1.0},
+        }
+    }
+    smoke["output_dir"] = str(tmp_path / "results")
+    config_path = tmp_path / "unregistered.yaml"
+    config_path.write_text(yaml.safe_dump(smoke), encoding="utf-8")
+
+    monkeypatch.setenv("TSBENCH_ALLOW_UNREGISTERED", "1")
+    summary = runner.run_experiment(config_path, root=repo_root)
+    with open(summary["results"], newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows
+    # The declared family is stamped on the row, not the model's self-asserted one.
+    assert all(row["family"] == "ml" for row in rows)
+
+    metadata = json.loads(
+        (Path(summary["results"]).parent / "run.json").read_text(encoding="utf-8")
+    )
+    recorded = metadata["unregistered_models"]["mine"]
+    assert recorded["license"] == "MIT"
+    assert recorded["family"] == "ml"
+    assert recorded["entrypoint"] == "tests._stub_models:ConstantForecaster"
+    assert recorded["registered"] is False
+
+
 def test_registry_baselines_construct_through_runner_with_a_seed(
     monkeypatch: pytest.MonkeyPatch,
 ):

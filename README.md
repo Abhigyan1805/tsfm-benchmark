@@ -88,11 +88,17 @@ and called with the experiment config path. The registry is
 construction path and every call passes the license gate.
 
 A config-declared `entrypoint` for a name the registry does not know is the
-documented not-yet-landed-module fallback; it is imported directly and is
-therefore **outside** the registry's license gate. Registry-known names still
-pass the gate (their not-yet-landed fallback calls `check_license` before
-importing the config entrypoint), and the TSFM wrappers still refuse unverified
-checkpoint ids through the fallback.
+documented way to benchmark your own forecaster. It is refused unless the run
+explicitly opts in with `TSBENCH_ALLOW_UNREGISTERED=1` (or
+`run --allow-unregistered`), and the config must declare the model's `family`
+and a non-empty `license`; a missing license, or one outside the permissive
+allowlist, is refused exactly as for a registered model. The declared family
+and license are recorded in `run.json` under `unregistered_models` and the
+family is stamped on every result row, so an unregistered result carries its
+provenance instead of only asserting it. Registry-known names still pass the
+gate (their not-yet-landed fallback calls `check_license` before importing the
+config entrypoint), and the TSFM wrappers still refuse unverified checkpoint ids
+through the fallback.
 
 ## Models and the license gate
 
@@ -113,6 +119,7 @@ non-commercial and deliberately out of scope.
 | Variable | Effect |
 | --- | --- |
 | `TSBENCH_ALLOW_NONCOMMERCIAL=1` | instantiate non-permissive or unknown-license models |
+| `TSBENCH_ALLOW_UNREGISTERED=1` | run a config-declared model whose name is not in the registry (requires a declared `family` and `license`) |
 | `TSBENCH_ALLOW_MODEL_DOWNLOAD=1` | permit TSFM weight downloads (GPU slice gate) |
 | `TSBENCH_RESULTS_DIR` | override the results root (default `results/`) |
 

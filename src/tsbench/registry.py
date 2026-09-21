@@ -21,6 +21,7 @@ from .base import Forecaster
 __all__ = [
     "ALLOWED_FAMILIES",
     "ALLOW_NONCOMMERCIAL_ENV",
+    "ALLOW_UNREGISTERED_ENV",
     "DEFAULT_MODELS_CONFIG",
     "PERMISSIVE_LICENSES",
     "LicenseError",
@@ -33,9 +34,12 @@ __all__ = [
     "is_permissive_license",
     "load_registry",
     "noncommercial_allowed",
+    "parse_unregistered_spec",
+    "unregistered_allowed",
 ]
 
 ALLOW_NONCOMMERCIAL_ENV = "TSBENCH_ALLOW_NONCOMMERCIAL"
+ALLOW_UNREGISTERED_ENV = "TSBENCH_ALLOW_UNREGISTERED"
 DEFAULT_MODELS_CONFIG = Path("configs") / "models.yaml"
 
 ALLOWED_FAMILIES = frozenset({"baseline", "classical", "ml", "deep", "tsfm"})
@@ -91,6 +95,18 @@ def noncommercial_allowed(override: bool | None = None) -> bool:
     if override is not None:
         return bool(override)
     raw = os.environ.get(ALLOW_NONCOMMERCIAL_ENV, "")
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def unregistered_allowed(override: bool | None = None) -> bool:
+    """True when config-declared models outside the registry may run.
+
+    Parsed exactly like :func:`noncommercial_allowed`: opt-in only, so an
+    unrelated or unrecognised value can never activate it.
+    """
+    if override is not None:
+        return bool(override)
+    raw = os.environ.get(ALLOW_UNREGISTERED_ENV, "")
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
@@ -195,6 +211,64 @@ def _parse_spec(key: str, raw: Any) -> ModelSpec:
         zero_shot=zero_shot,
         license=str(raw["license"]).strip(),
         revision=str(raw["revision"]).strip(),
+        params=raw.get("params"),
+        weights=raw.get("weights"),
+        notes=raw.get("notes"),
+    )
+
+
+_UNREGISTERED_REQUIRED_FIELDS = ("entrypoint", "family", "license")
+
+
+def parse_unregistered_spec(key: str, raw: Any) -> ModelSpec:
+    """Validate a config-declared model the manifest does not know.
+
+    An unregistered model must declare the provenance the manifest requires of
+    a registered entry -- ``entrypoint``, ``family``, and a non-empty
+    ``license`` -- so it can be license-gated and recorded instead of running
+    silently. Unlike a manifest entry it may omit ``revision`` and
+    ``zero_shot`` (defaulted here) because those are read from the model itself
+    at run time; the runner-level ``kwargs``/``seed`` keys are ignored.
+    """
+    if not isinstance(raw, Mapping):
+        raise ModelConfigError(
+            f"model {key!r}: entry must be a mapping, got {type(raw).__name__}"
+        )
+    missing = [
+        name
+        for name in _UNREGISTERED_REQUIRED_FIELDS
+        if name not in raw
+        or raw[name] is None
+        or (isinstance(raw[name], str) and not raw[name].strip())
+    ]
+    if missing:
+        raise ModelConfigError(
+            f"model {key!r}: unregistered model is missing required field(s): "
+            f"{', '.join(missing)}; every model must declare a license and a family"
+        )
+    entrypoint = str(raw["entrypoint"])
+    module, _, attribute = entrypoint.partition(":")
+    if not module.strip() or not attribute.strip():
+        raise ModelConfigError(
+            f"model {key!r}: entrypoint must look like 'module:attribute', got {entrypoint!r}"
+        )
+    family = str(raw["family"])
+    if family not in ALLOWED_FAMILIES:
+        raise ModelConfigError(
+            f"model {key!r}: family must be one of {sorted(ALLOWED_FAMILIES)}, got {family!r}"
+        )
+    zero_shot = raw.get("zero_shot", False)
+    if not isinstance(zero_shot, bool):
+        raise ModelConfigError(
+            f"model {key!r}: zero_shot must be a boolean, got {zero_shot!r}"
+        )
+    return ModelSpec(
+        key=key,
+        entrypoint=entrypoint,
+        family=family,
+        zero_shot=zero_shot,
+        license=str(raw["license"]).strip(),
+        revision=str(raw.get("revision") or "unregistered").strip(),
         params=raw.get("params"),
         weights=raw.get("weights"),
         notes=raw.get("notes"),

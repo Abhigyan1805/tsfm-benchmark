@@ -16,6 +16,7 @@ from tsbench.base import RESULT_COLUMNS, Forecaster, ModelInfo
 from tsbench.cli import main
 from tsbench.registry import (
     ALLOW_NONCOMMERCIAL_ENV,
+    ALLOW_UNREGISTERED_ENV,
     LicenseError,
     ModelConfigError,
     ModelImportError,
@@ -23,6 +24,8 @@ from tsbench.registry import (
     is_permissive_license,
     load_registry,
     noncommercial_allowed,
+    parse_unregistered_spec,
+    unregistered_allowed,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -72,6 +75,7 @@ class NotAForecaster:
 @pytest.fixture(autouse=True)
 def _clear_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(ALLOW_NONCOMMERCIAL_ENV, raising=False)
+    monkeypatch.delenv(ALLOW_UNREGISTERED_ENV, raising=False)
 
 
 @pytest.fixture
@@ -314,6 +318,62 @@ def test_noncommercial_env_falsy(monkeypatch: pytest.MonkeyPatch, value: str) ->
 def test_explicit_override_beats_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ALLOW_NONCOMMERCIAL_ENV, "1")
     assert noncommercial_allowed(False) is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " On "])
+def test_unregistered_env_truthy(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv(ALLOW_UNREGISTERED_ENV, value)
+    assert unregistered_allowed() is True
+
+
+@pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "banana"])
+def test_unregistered_env_falsy(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv(ALLOW_UNREGISTERED_ENV, value)
+    assert unregistered_allowed() is False
+
+
+def test_unregistered_override_beats_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ALLOW_UNREGISTERED_ENV, "1")
+    assert unregistered_allowed(False) is False
+
+
+def test_parse_unregistered_spec_accepts_a_declared_license() -> None:
+    spec = parse_unregistered_spec(
+        "mine",
+        {
+            "entrypoint": "tests._stub_models:ConstantForecaster",
+            "family": "baseline",
+            "license": "MIT",
+            "kwargs": {"value": 1.0},
+            "seed": True,
+        },
+    )
+    assert spec.key == "mine"
+    assert spec.family == "baseline"
+    assert spec.license == "MIT"
+    assert spec.revision == "unregistered"
+    assert spec.zero_shot is False
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"license": "   "},
+        {"license": None},
+        {"family": "foundation"},
+        {"family": None},
+        {"entrypoint": "tests._stub_models.ConstantForecaster"},
+    ],
+)
+def test_parse_unregistered_spec_refuses_missing_provenance(overrides: dict) -> None:
+    raw = {
+        "entrypoint": "tests._stub_models:ConstantForecaster",
+        "family": "baseline",
+        "license": "MIT",
+    }
+    raw.update(overrides)
+    with pytest.raises(ModelConfigError):
+        parse_unregistered_spec("mine", raw)
 
 
 def test_permissive_allowlist_normalizes_spellings() -> None:
