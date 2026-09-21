@@ -6,9 +6,9 @@
 # `python -m tsbench.data.build_catalog --materialize` (network required) to
 # fetch and verify, or `--record <dataset>` to print per-series digests.
 #
-# A dataset or split is PRELIMINARY until it has been materialised and its
-# manifest records the real file hash. Preliminary datasets are never used to
-# produce results.
+# A downloaded dataset or split is PRELIMINARY until it has been materialised
+# and its pinned hash verifies; a committed local fixture (no URL) is trusted as
+# declared. Preliminary datasets are never used to produce results.
 
 version: 1
 

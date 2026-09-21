@@ -89,8 +89,9 @@ construction path and every call passes the license gate.
 
 A config-declared `entrypoint` for a name the registry does not know is the
 documented not-yet-landed-module fallback; it is imported directly and is
-therefore **outside** the registry's license gate. Registry-known names always
-route through `instantiate`, and the TSFM wrappers still refuse unverified
+therefore **outside** the registry's license gate. Registry-known names still
+pass the gate (their not-yet-landed fallback calls `check_license` before
+importing the config entrypoint), and the TSFM wrappers still refuse unverified
 checkpoint ids through the fallback.
 
 ## Models and the license gate
