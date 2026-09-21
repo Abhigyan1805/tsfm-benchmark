@@ -487,6 +487,7 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
             builder = lambda name=model_name, cfg=model_cfg: _build_model(  # noqa: E731
                 name, spec, model_cfg=cfg, seed=experiment.seed
             )
+            provenance = unregistered.get(model_name)
             outcomes = backtest_windows(
                 values,
                 plan,
@@ -495,7 +496,8 @@ def run_experiment(config_path: str | Path, *, root: str | Path = ".") -> dict[s
                 season_length=experiment.season_length,
                 track_memory=experiment.track_memory,
                 warmup=experiment.warmup,
-                family=unregistered.get(model_name, {}).get("family"),
+                family=(provenance or {}).get("family"),
+                model_name=model_name if provenance else None,
             )
             all_rows.extend(
                 _rows_for_model(

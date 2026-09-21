@@ -1030,6 +1030,10 @@ def test_unregistered_model_provenance_is_recorded_in_metadata_and_rows(
     assert rows
     # The declared family is stamped on the row, not the model's self-asserted one.
     assert all(row["family"] == "ml" for row in rows)
+    # The config key (the provenance key) is the row's model, not the stub's
+    # self-asserted "constant", so the run's recorded provenance can be joined
+    # back to the row.
+    assert all(row["model"] == "mine" for row in rows)
 
     metadata = json.loads(
         (Path(summary["results"]).parent / "run.json").read_text(encoding="utf-8")
