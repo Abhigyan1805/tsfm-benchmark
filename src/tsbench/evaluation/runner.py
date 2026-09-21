@@ -330,9 +330,9 @@ def _unregistered_provenance(experiment: ExperimentConfig) -> dict[str, dict[str
 
     Registered names are omitted: ``configs/models.yaml`` is their source of
     truth and is already pinned in the run's config. Each unregistered model is
-    validated here -- opt-in, declared family, and an allowlisted license -- so
-    a run refuses it before any window executes, and its declared provenance is
-    stamped into ``run.json``.
+    validated here -- opt-in, declared family, an allowlisted license, and an
+    entrypoint that builds -- so a run refuses it before any window executes,
+    and its declared provenance is stamped into ``run.json``.
     """
     registry = _try_registry()
     known = set(registry.keys()) if registry is not None else set()
@@ -340,7 +340,17 @@ def _unregistered_provenance(experiment: ExperimentConfig) -> dict[str, dict[str
     for name in experiment.models:
         if name in known:
             continue
-        spec = _unregistered_spec(name, _model_config(experiment, name))
+        model_cfg = _model_config(experiment, name)
+        spec = _unregistered_spec(name, model_cfg)
+        try:
+            _build_model(name, spec, model_cfg=model_cfg, seed=experiment.seed)
+        except RunnerError:
+            raise
+        except Exception as exc:
+            raise RunnerError(
+                f"model {name!r}: entrypoint {spec.entrypoint!r} cannot be built: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
         provenance[name] = {
             "entrypoint": spec.entrypoint,
             "family": spec.family,

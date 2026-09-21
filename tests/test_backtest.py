@@ -1045,6 +1045,45 @@ def test_unregistered_model_provenance_is_recorded_in_metadata_and_rows(
     assert recorded["registered"] is False
 
 
+def _unregistered_smoke_config(tmp_path: Path, entrypoint: str) -> Path:
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[1]
+    smoke = yaml.safe_load(
+        (repo_root / "configs" / "experiments" / "smoke.yaml").read_text(encoding="utf-8")
+    )
+    smoke["models"] = ["mine"]
+    smoke["model_configs"] = {
+        "mine": {"entrypoint": entrypoint, "family": "ml", "license": "MIT"}
+    }
+    smoke["output_dir"] = str(tmp_path / "results")
+    config_path = tmp_path / "unregistered_broken.yaml"
+    config_path.write_text(yaml.safe_dump(smoke), encoding="utf-8")
+    return config_path
+
+
+def test_unregistered_unimportable_entrypoint_is_refused_before_any_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo_root = Path(__file__).resolve().parents[1]
+    config_path = _unregistered_smoke_config(tmp_path, "tsbench_no_such_module:Model")
+    monkeypatch.setenv("TSBENCH_ALLOW_UNREGISTERED", "1")
+    with pytest.raises(runner.RunnerError, match="tsbench_no_such_module"):
+        runner.run_experiment(config_path, root=repo_root)
+
+
+def test_unregistered_unconstructable_entrypoint_is_refused_before_any_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo_root = Path(__file__).resolve().parents[1]
+    config_path = _unregistered_smoke_config(
+        tmp_path, "tests._stub_models:BrokenForecaster"
+    )
+    monkeypatch.setenv("TSBENCH_ALLOW_UNREGISTERED", "1")
+    with pytest.raises(runner.RunnerError, match="cannot be built"):
+        runner.run_experiment(config_path, root=repo_root)
+
+
 def test_registry_baselines_construct_through_runner_with_a_seed(
     monkeypatch: pytest.MonkeyPatch,
 ):

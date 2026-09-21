@@ -13,7 +13,13 @@ import numpy as np
 
 from tsbench.evaluation.contract import ModelInfo
 
-__all__ = ["ConstantForecaster", "DriftForecaster", "NaiveStub", "SeasonalNaiveStub"]
+__all__ = [
+    "BrokenForecaster",
+    "ConstantForecaster",
+    "DriftForecaster",
+    "NaiveStub",
+    "SeasonalNaiveStub",
+]
 
 
 class _BaseStub:
@@ -96,3 +102,10 @@ class DriftForecaster(_BaseStub):
         slope = (context[-1] - context[0]) / (context.size - 1)
         steps = np.arange(1, int(h) + 1, dtype=np.float64)
         return context[-1] + slope * steps
+
+
+class BrokenForecaster(_BaseStub):
+    name = "broken"
+
+    def __init__(self, **extra) -> None:
+        raise RuntimeError("broken forecaster cannot be constructed")
