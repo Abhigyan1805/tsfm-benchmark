@@ -101,8 +101,9 @@ What needs more than that:
   `peak_mem_mb` are only strictly comparable within a tier; `peak_mem_mb` is empty for
   the CPU tier. Latency covers fit + predict, so trained models pay their training time
   in it.
-- Still pending, per `REPORT.md` section 3: paired statistics / critical-difference
-  diagram, CPU memory telemetry. The TimesFM paper-reproduction lane named in `PLAN.md`
+- Still pending, per `REPORT.md` section 3: the paired-statistics / critical-difference
+  analysis (the `tsbench.evaluation.stats` code exists but has not been applied to these
+  results) and CPU memory telemetry. The TimesFM paper-reproduction lane named in `PLAN.md`
   (E9) has no results in this repo yet.
 
 ## What I learned / design decisions
@@ -145,15 +146,9 @@ compute handoff in `docs/colab-handoff.md`.
 LSTM/Transformer, zero-shot TimesFM 2.5 / Chronos-Bolt) now run end-to-end on the real
 Monash *Electricity Hourly* dataset over horizons 24/48/96/192, on the **same** bounded
 origin sample of the frozen splits (identical split-manifest digest across both runs).
-The zero-shot TSFMs win outright: at the 24-step horizon `chronos_bolt` leads (seasonal
-MASE **0.79** at ≈35 ms/forecast), `timesfm25` is second (**0.88** at ≈122 ms), both
-ahead of the `seasonal_naive` floor (**1.00**) and every trained model. Classical
-`auto_ets` is the best trained model (**1.14** at ≈177 ms), `xgboost_lags` is
-competitive (**1.29** at ≈104 ms), and the from-scratch deep models are the negative
-result — LSTM **1.75** and Transformer **1.74** at ≈342/600 ms — behind the seasonal
-floor. The zero-shot lead holds at every horizon (Chronos MASE 0.79→1.04, TimesFM
-0.88→1.11, seasonal floor 1.00→1.30). Full table, figures, and the measured-vs-pending
-list: [`REPORT.md`](REPORT.md) and [`docs/results_summary.csv`](docs/results_summary.csv).
+Headline numbers are in [Results at a glance](#results-at-a-glance); the full table,
+figures, and the measured-vs-pending list are in [`REPORT.md`](REPORT.md) and
+[`docs/results_summary.csv`](docs/results_summary.csv).
 
 ## Install and test details
 
