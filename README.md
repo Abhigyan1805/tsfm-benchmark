@@ -36,7 +36,7 @@ models.
   MASE 0.79 to 1.04, TimesFM 0.88 to 1.11, seasonal floor 1.00 to 1.30.
 - The small from-scratch deep models are the negative result: behind the seasonal
   floor and among the most expensive per forecast (the Transformer is the slowest
-  model; only `auto_arima` is slower than the LSTM).
+  model, and only it and `auto_arima` are slower than the LSTM).
 - These come from a bounded sample of forecast origins (see limitations below), not
   the full-stride sweep.
 
